@@ -1,0 +1,19 @@
+{
+  "name": "astor-web-site",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Лендінг автосервісу «Астор» + бекенд для заявок у Telegram",
+  "type": "module",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node --watch server/server.js",
+    "tg:chat-id": "node server/scripts/chat-id.js",
+    "tg:test": "node server/scripts/test-send.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}
