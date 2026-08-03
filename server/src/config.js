@@ -19,9 +19,14 @@ const int = (v, fallback) => {
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const isProd = NODE_ENV === 'production';
 
+// На Vercel немає постійного процесу: функція живе один запит. Від цього
+// залежить, чи можна тримати long polling і чи є куди писати файли.
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+
 export const config = {
   nodeEnv: NODE_ENV,
   isProd,
+  isServerless,
 
   port: int(process.env.PORT, 3000),
   host: process.env.HOST || '0.0.0.0',
@@ -36,6 +41,9 @@ export const config = {
     // Необовʼязково: id теми (topic) у групі з увімкненими темами.
     threadId: process.env.TELEGRAM_THREAD_ID || '',
     timeoutMs: int(process.env.TELEGRAM_TIMEOUT_MS, 10_000),
+    // Секрет, яким Telegram підписує запити на webhook. Задається при
+    // setWebhook і перевіряється в заголовку кожного оновлення.
+    webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET || '',
   },
 
   rateLimit: {
@@ -60,10 +68,10 @@ export const config = {
   timezone: process.env.TZ_DISPLAY || 'Europe/Kyiv',
   serveStatic: bool(process.env.SERVE_STATIC, true),
 
-  // Приймач команд бота (/start, /help, /id). Вимкніть, якщо запускаєте
-  // кілька інстансів: getUpdates може читати лише один процес, решта
-  // отримають 409 Conflict.
-  botPolling: bool(process.env.BOT_POLLING, true),
+  // Long polling для команд бота. У serverless неможливий — там webhook.
+  // Вимикайте вручну, якщо запускаєте кілька інстансів: getUpdates може
+  // читати лише один процес, решта отримають 409 Conflict.
+  botPolling: bool(process.env.BOT_POLLING, !isServerless),
 };
 
 export const telegramConfigured = Boolean(config.telegram.token && config.telegram.chatId);

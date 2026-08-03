@@ -1,50 +1,96 @@
 /**
- * Простий in-memory rate limiter — без зовнішніх залежностей.
- * Достатньо для одного процесу. Якщо будете масштабувати на кілька інстансів,
- * замініть Map на Redis (логіка та сама).
+ * Rate limiter із двома режимами:
+ *
+ *  • Redis  — коли задано KV_REST_API_* / UPSTASH_REDIS_REST_*. Єдиний лічильник
+ *             на всі інстанси; у serverless це єдиний спосіб рахувати чесно,
+ *             бо памʼять функції вмирає разом із запитом.
+ *  • памʼять — запасний варіант для локальної розробки.
+ *
+ * Якщо Redis раптом недоступний, запит ПРОПУСКАЄМО: втратити заявку клієнта
+ * гірше, ніж пропустити зайвий запит спамера.
  */
+import { redis, redisConfigured } from './redis.js';
+
+/* ── памʼять (локально) ─────────────────────────────────────────────── */
 
 const buckets = new Map();
 
-// Прибирання протухлих записів, щоб Map не ріс нескінченно.
 const sweeper = setInterval(() => {
   const now = Date.now();
   for (const [key, bucket] of buckets) {
     if (bucket.resetAt <= now) buckets.delete(key);
   }
 }, 60_000);
-sweeper.unref();
+sweeper.unref?.();
 
-/**
- * @param {string} name  простір імен (окремі ліміти для заявок і кліків)
- * @param {number} windowMs
- * @param {number} max
- */
+function hitMemory(key, windowMs, max) {
+  const now = Date.now();
+  let bucket = buckets.get(key);
+  if (!bucket || bucket.resetAt <= now) {
+    bucket = { count: 0, resetAt: now + windowMs };
+    buckets.set(key, bucket);
+  }
+  bucket.count += 1;
+  return {
+    count: bucket.count,
+    remaining: Math.max(0, max - bucket.count),
+    resetSec: Math.ceil((bucket.resetAt - now) / 1000),
+    limited: bucket.count > max,
+  };
+}
+
+/* ── Redis ──────────────────────────────────────────────────────────── */
+
+async function hitRedis(key, windowMs, max) {
+  const windowSec = Math.ceil(windowMs / 1000);
+
+  // INCR створює ключ із значенням 1, якщо його не було. TTL ставимо лише
+  // на першому влучанні, інакше вікно нескінченно поповзе вперед.
+  const [count, ttlRaw] = await redis([
+    ['INCR', key],
+    ['TTL', key],
+  ]);
+
+  let ttl = Number(ttlRaw);
+  if (ttl < 0) {
+    await redis(['EXPIRE', key, String(windowSec)]);
+    ttl = windowSec;
+  }
+
+  return {
+    count: Number(count),
+    remaining: Math.max(0, max - Number(count)),
+    resetSec: ttl,
+    limited: Number(count) > max,
+  };
+}
+
+/* ── middleware ─────────────────────────────────────────────────────── */
+
 export function rateLimit(name, windowMs, max) {
-  return (req, res, next) => {
-    const key = `${name}:${req.ip}`;
-    const now = Date.now();
-    let bucket = buckets.get(key);
+  return async (req, res, next) => {
+    const key = `rl:${name}:${req.ip}`;
+    let state;
 
-    if (!bucket || bucket.resetAt <= now) {
-      bucket = { count: 0, resetAt: now + windowMs };
-      buckets.set(key, bucket);
+    try {
+      state = redisConfigured
+        ? await hitRedis(key, windowMs, max)
+        : hitMemory(key, windowMs, max);
+    } catch (err) {
+      console.error('[rateLimit] Redis недоступний, пропускаю запит:', err.message);
+      return next();
     }
 
-    bucket.count += 1;
-
-    const remaining = Math.max(0, max - bucket.count);
     res.setHeader('RateLimit-Limit', max);
-    res.setHeader('RateLimit-Remaining', remaining);
-    res.setHeader('RateLimit-Reset', Math.ceil((bucket.resetAt - now) / 1000));
+    res.setHeader('RateLimit-Remaining', state.remaining);
+    res.setHeader('RateLimit-Reset', state.resetSec);
 
-    if (bucket.count > max) {
-      const retryAfter = Math.ceil((bucket.resetAt - now) / 1000);
-      res.setHeader('Retry-After', retryAfter);
+    if (state.limited) {
+      res.setHeader('Retry-After', state.resetSec);
       return res.status(429).json({
         ok: false,
         error: 'rate_limited',
-        message: `Забагато спроб. Спробуйте за ${Math.ceil(retryAfter / 60)} хв або зателефонуйте нам.`,
+        message: `Забагато спроб. Спробуйте за ${Math.max(1, Math.ceil(state.resetSec / 60))} хв або зателефонуйте нам.`,
       });
     }
 

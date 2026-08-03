@@ -11,7 +11,8 @@
     "start": "node server/server.js",
     "dev": "node --watch server/server.js",
     "tg:chat-id": "node server/scripts/chat-id.js",
-    "tg:test": "node server/scripts/test-send.js"
+    "tg:test": "node server/scripts/test-send.js",
+    "tg:webhook": "node server/scripts/webhook.js"
   },
   "dependencies": {
     "express": "^5.1.0"

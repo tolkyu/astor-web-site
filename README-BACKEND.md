@@ -203,18 +203,91 @@ npm run dev     # → http://localhost:3000
 
 ---
 
-## Публікація на сервері
+## Публікація на Vercel
 
-Підійде будь-який хостинг з Node.js ≥ 20.11 (Render, Railway, Fly.io, VPS).
+Vercel — serverless: код живе рівно один запит. Тому там інша конфігурація,
+ніж локально, і потрібне зовнішнє сховище.
 
-1. Змінні `TELEGRAM_BOT_TOKEN` і `TELEGRAM_CHAT_ID` задайте **в панелі хостингу**,
-   а не файлом `.env`.
+### 1. Змінні оточення
+
+У Vercel → Settings → Environment Variables лишіть **тільки це**:
+
+| Змінна | Значення |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | токен від BotFather |
+| `TELEGRAM_CHAT_ID` | ваш id |
+| `TELEGRAM_WEBHOOK_SECRET` | випадковий рядок (див. нижче) |
+
+**Приберіть, якщо імпортували з `.env`:** `PORT`, `HOST`, `NODE_ENV`.
+
+> `NODE_ENV` найважливіше. Vercel виставляє `production` сам, а імпортоване
+> з `.env` значення `development` його перебиває — і тоді `trustProxy`
+> вимикається, rate limit бачить IP проксі замість відвідувачів, і **всі
+> клієнти рахуються як один**. Після 5 заявок сайт почне відмовляти всім.
+
+`RATE_LIMIT_*` можна лишити або прибрати — вони збігаються з дефолтами.
+
+Секрет для webhook згенеруйте так:
+
+```bash
+node -e "console.log(crypto.randomUUID())"
+```
+
+### 2. Сховище
+
+Storage → Marketplace → **Upstash for Redis** → Connect до проєкту.
+Vercel сам додасть `KV_REST_API_URL` і `KV_REST_API_TOKEN` — вручну нічого
+вписувати не треба.
+
+Без Redis у serverless не працюють дві речі: rate limit (лічильник у памʼяті
+вмирає разом із функцією) і резервні копії заявок (файлова система лише
+для читання).
+
+### 3. Webhook для бота
+
+Long polling у serverless неможливий — постійного процесу немає. Після
+першого деплою вкажіть боту адресу:
+
+```bash
+npm run tg:webhook -- https://ваш-домен.vercel.app
+```
+
+Перевірити стан або відкотитись назад на polling:
+
+```bash
+npm run tg:webhook -- status
+npm run tg:webhook -- delete
+```
+
+> `TELEGRAM_WEBHOOK_SECRET` має бути **однаковий** у Vercel і локально в `.env` —
+> звідси команда бере його, щоб передати Telegram, а сервер ним перевіряє
+> кожен вхідний запит.
+
+### Як це влаштовано
+
+| Файл | Роль |
+|---|---|
+| `server/src/app.js` | сам застосунок, без запуску |
+| `server/server.js` | локально: слухає порт + long polling |
+| `api/index.js` | на Vercel: той самий застосунок як функція |
+| `vercel.json` | `/api/*` → функція, решта → CDN |
+
+Перевірити, що все зійшлось: `GET /api/health` має віддати
+`"serverless": true`, `"storage": "redis"`, `"botMode": "webhook"`.
+
+---
+
+## Публікація деінде (Render, Railway, Fly, VPS)
+
+Там постійний процес, тож усе простіше — код працює як є:
+
+1. `TELEGRAM_BOT_TOKEN` і `TELEGRAM_CHAT_ID` задайте в панелі хостингу.
 2. `NODE_ENV=production`
-3. Якщо перед додатком стоїть nginx / Caddy / хмарний проксі — додайте `TRUST_PROXY=1`,
-   інакше rate limit рахуватиме всіх відвідувачів як один IP.
+3. За nginx / Caddy / хмарним проксі — додайте `TRUST_PROXY=1`.
 4. Команда запуску: `npm start`
-5. `data/` тримайте на постійному диску, інакше резервні копії заявок зникатимуть
-   при кожному деплої.
+5. `data/` тримайте на постійному диску, інакше резервні копії заявок
+   зникатимуть при кожному деплої. Або підключіть Redis — тоді `data/`
+   не використовується.
 
 ---
 
@@ -229,6 +302,10 @@ npm run dev     # → http://localhost:3000
 | Заявки не доходять, у логах `502` | подивіться `data/submissions.jsonl` — вони там |
 | Rate limit ловить одразу всіх | забули `TRUST_PROXY=1` за проксі |
 | `401 Unauthorized` | токен зіпсовано або відкликано — `/revoke` у BotFather |
-| **`/start` мовчить** | не запущено сервер — команди обробляє бекенд, не Telegram |
+| **`/start` мовчить локально** | не запущено сервер — команди обробляє бекенд, не Telegram |
+| **`/start` мовчить на Vercel** | не встановлено webhook: `npm run tg:webhook -- https://…` |
+| `/api/*` віддає 404 на Vercel | немає `vercel.json` або теки `api/` в деплої |
+| `health` показує `storage: file` на Vercel | не підключено Upstash Redis |
+| Усіх клієнтів разом ловить rate limit | лишили `NODE_ENV=development` у змінних Vercel |
 | `409 Conflict` у логах | оновлення читає інший процес або встановлено webhook |
 | `tg:chat-id` показує порожньо | працює сервер — він забрав оновлення; зупиніть його |

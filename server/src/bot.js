@@ -1,12 +1,13 @@
 /**
- * Приймач команд бота (long polling).
+ * Приймач команд бота. Два режими, залежно від того, де крутиться код:
  *
- * Без нього бот мовчить на /start: решта коду вміє тільки НАДСИЛАТИ
- * повідомлення, а вхідні оновлення ніхто не забирає.
+ *  • webhook      — на Vercel. Telegram сам стукає в /api/telegram/webhook.
+ *                   Єдиний робочий варіант у serverless: постійного процесу,
+ *                   який міг би тримати long polling, там просто немає.
+ *  • long polling — локально. Не потребує публічного HTTPS-домену
+ *                   і працює з-за NAT.
  *
- * Long polling обрано замість webhook свідомо: не треба публічного HTTPS-домену,
- * працює з локальної машини і з-за NAT. Якщо колись знадобиться webhook —
- * замініть цей модуль на роут, що приймає POST від Telegram.
+ * Обробник оновлення (processUpdate) спільний для обох режимів.
  */
 import { config, telegramConfigured } from './config.js';
 import { escapeHtml, sendMessage } from './telegram.js';
@@ -169,4 +170,32 @@ export async function startBot() {
 export function stopBot() {
   running = false;
   controller?.abort();
+}
+
+/* ─────────────────────────────── webhook ─────────────────────────────── */
+
+/**
+ * Обробник для роуту POST /api/telegram/webhook.
+ *
+ * Telegram не автентифікує себе нічим, крім секрету в заголовку, який ми
+ * самі задали при setWebhook. Без цієї перевірки будь-хто, знаючи URL,
+ * міг би слати боту фальшиві оновлення.
+ */
+export async function handleWebhook(req, res) {
+  const secret = config.telegram.webhookSecret;
+
+  if (secret && req.get('x-telegram-bot-api-secret-token') !== secret) {
+    console.warn('[bot] webhook: невірний секрет, ip=%s', req.ip);
+    return res.status(401).json({ ok: false });
+  }
+
+  // Відповідаємо одразу: Telegram повторює доставку, якщо чекати надто довго,
+  // і тоді на одну команду прилетить кілька відповідей.
+  res.status(200).json({ ok: true });
+
+  try {
+    await processUpdate(req.body || {});
+  } catch (err) {
+    console.error('[bot] webhook: помилка обробки:', err.message);
+  }
 }

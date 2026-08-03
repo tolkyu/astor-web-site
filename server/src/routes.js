@@ -5,6 +5,8 @@ import { escapeHtml, sendMessage } from './telegram.js';
 import { rateLimit } from './rateLimit.js';
 import { saveSubmission } from './store.js';
 import { formatPhone, validateBooking, validateLead } from './validate.js';
+import { handleWebhook } from './bot.js';
+import { redisConfigured, redisPing } from './redis.js';
 
 export const router = Router();
 
@@ -129,13 +131,24 @@ router.post(
   }
 );
 
+/* ────────────────── POST /api/telegram/webhook ──────────────────
+   Куди Telegram надсилає команди боту, коли працює webhook-режим
+   (на Vercel — єдиний можливий).                                   */
+
+router.post('/telegram/webhook', handleWebhook);
+
 /* ─────────────────────────── GET /api/health ─────────────────────────── */
 
-router.get('/health', (req, res) => {
+router.get('/health', async (req, res) => {
+  const storage = redisConfigured ? await redisPing() : null;
+
   res.json({
     ok: true,
-    uptime: Math.round(process.uptime()),
-    telegram: telegramConfigured ? 'configured' : 'dry-run',
     env: config.nodeEnv,
+    serverless: config.isServerless,
+    telegram: telegramConfigured ? 'configured' : 'dry-run',
+    storage: redisConfigured ? (storage.ok ? 'redis' : `redis-error: ${storage.reason}`) : 'file',
+    botMode: config.isServerless ? 'webhook' : config.botPolling ? 'polling' : 'off',
+    uptime: Math.round(process.uptime()),
   });
 });
