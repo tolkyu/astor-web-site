@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Астор — редагування цін</title>
+<link rel="icon" href="/assets/logo-mark.png" type="image/png" />
+<link rel="stylesheet" href="_ds/modernist-3bb2d244-ca81-4876-bd15-2c933a71cb63/styles.css" />
+<style>
+/* Ті самі бренд-токени, що й на сайті — щоб адмінка не виглядала чужою. */
+:root {
+  --color-bg: #f1ebe3;
+  --color-surface: #e7e0d6;
+  --color-text: #052c45;
+  --color-divider: #052c45;
+  --color-accent: #e85306;
+  --color-accent-600: #c44605;
+  --color-accent-700: #9c3804;
+  --edge: clamp(16px, 4vw, 48px);
+}
+body { margin: 0; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 var(--edge); }
+
+.top {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 16px var(--edge); border-bottom: 2px solid var(--color-divider);
+}
+.top h1 {
+  font-size: 20px; margin: 0; margin-right: auto;
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+}
+.top .status { font-size: 13px; color: color-mix(in srgb, var(--color-text) 70%, transparent); }
+
+/* — вхід — */
+.login { max-width: 380px; margin: 12vh auto; padding: 0 var(--edge); }
+.login h2 { font-size: 26px; margin: 0 0 20px; }
+.login .field { margin-bottom: 14px; }
+
+/* — редактор — */
+.editor { padding: 24px 0 80px; }
+.cats { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 24px; }
+.cat-tab {
+  padding: 7px 12px; font-size: 13px; cursor: pointer;
+  border: 1px solid var(--color-divider); background: transparent;
+  font-family: inherit; color: inherit;
+}
+.cat-tab[aria-selected='true'] { background: var(--color-accent); color: var(--color-bg); border-color: var(--color-accent); }
+.cat-tab .n { opacity: 0.65; margin-left: 6px; }
+
+.cat-head { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 16px; }
+.cat-head .field { flex: 1 1 260px; margin: 0; }
+
+table.rows { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.rows th {
+  text-align: left; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  padding: 8px 6px; border-bottom: 2px solid var(--color-divider);
+}
+table.rows td { padding: 4px 6px; border-bottom: 1px solid color-mix(in srgb, var(--color-text) 25%, transparent); vertical-align: middle; }
+table.rows .input { min-height: 32px; }
+.col-price, .col-time { width: 150px; }
+.col-act { width: 118px; white-space: nowrap; text-align: right; }
+.icon-btn {
+  width: 30px; height: 30px; padding: 0; line-height: 1; cursor: pointer;
+  border: 1px solid var(--color-divider); background: transparent;
+  font-family: inherit; font-size: 14px; color: inherit;
+}
+.icon-btn:hover { background: color-mix(in srgb, var(--color-text) 8%, transparent); }
+.icon-btn.danger:hover { background: color-mix(in srgb, var(--color-accent) 16%, transparent); color: var(--color-accent-700); }
+.icon-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.row-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 18px; }
+
+/* — нижня панель збереження — */
+.bar {
+  position: sticky; bottom: 0; margin-top: 28px;
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  padding: 14px var(--edge); border-top: 2px solid var(--color-divider);
+  background: var(--color-bg);
+}
+.bar .spacer { margin-left: auto; }
+.msg { font-size: 13px; }
+.msg.err { color: var(--color-accent-700); }
+.msg.ok { color: #1c6b2b; }
+.warn {
+  font-size: 13px; padding: 10px 12px; margin-bottom: 20px;
+  border: 1px solid var(--color-accent); color: var(--color-accent-700);
+}
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- ── вхід ─────────────────────────────────────────────────────────── -->
+<section class="login" id="login">
+  <h2>Редагування цін</h2>
+  <form id="login-form">
+    <div class="field">
+      <label for="pw">Пароль</label>
+      <input class="input" id="pw" type="password" autocomplete="current-password" required />
+    </div>
+    <p class="msg err" id="login-msg" hidden></p>
+    <button class="btn btn-primary" type="submit" id="login-btn">Увійти</button>
+  </form>
+</section>
+
+<!-- ── редактор ─────────────────────────────────────────────────────── -->
+<div id="app" hidden>
+  <header class="top">
+    <h1>Ціни — Астор</h1>
+    <span class="status" id="meta"></span>
+    <a class="btn btn-secondary" href="/" target="_blank" rel="noopener">Відкрити сайт</a>
+    <button class="btn btn-secondary" id="logout">Вийти</button>
+  </header>
+
+  <div class="wrap editor">
+    <p class="warn" id="not-persistent" hidden>
+      Redis не підключено — зміни живуть лише до перезапуску сервера і на сайті не збережуться.
+    </p>
+
+    <div class="cats" id="cats" role="tablist"></div>
+
+    <div id="cat-body">
+      <div class="cat-head">
+        <div class="field">
+          <label for="cat-label">Назва категорії</label>
+          <input class="input" id="cat-label" maxlength="60" />
+        </div>
+        <button class="btn btn-secondary" id="cat-left">← Лівіше</button>
+        <button class="btn btn-secondary" id="cat-right">Правіше →</button>
+        <button class="btn btn-secondary" id="cat-del">Видалити категорію</button>
+      </div>
+
+      <table class="rows">
+        <thead>
+          <tr>
+            <th>Послуга</th>
+            <th class="col-price">Вартість від, грн</th>
+            <th class="col-time">Час, хв</th>
+            <th class="col-act"></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+
+      <div class="row-actions">
+        <button class="btn btn-secondary" id="add-row">+ Додати послугу</button>
+        <button class="btn btn-secondary" id="add-cat">+ Додати категорію</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="bar">
+    <button class="btn btn-primary" id="save">Зберегти</button>
+    <button class="btn btn-secondary" id="revert">Скасувати зміни</button>
+    <span class="msg" id="msg"></span>
+    <span class="spacer"></span>
+    <button class="btn btn-secondary" id="reset">Повернути початковий прайс</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const TOKEN_KEY = 'astor-admin-token';
+  let token = localStorage.getItem(TOKEN_KEY) || '';
+  let prices = [];
+  let saved = '';          // знімок для «Скасувати зміни» і попередження про вихід
+  let active = 0;
+
+  const $ = (id) => document.getElementById(id);
+  const dirty = () => JSON.stringify(prices) !== saved;
+
+  async function api(path, options = {}) {
+    const res = await fetch('/api/admin' + path, {
+      ...options,
+      headers: {
+        'content-type': 'application/json',
+        ...(token ? { authorization: 'Bearer ' + token } : {}),
+        ...options.headers,
+      },
+    });
+    if (res.status === 401) {
+      // Сесія протухла або пароль змінили — повертаємо на вхід.
+      logout();
+      throw new Error('Сесія завершилась, увійдіть знову.');
+    }
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || !body.ok) throw new Error(body.message || `Помилка ${res.status}`);
+    return body;
+  }
+
+  /* ── вхід / вихід ─────────────────────────────────────────────── */
+
+  function logout() {
+    token = '';
+    localStorage.removeItem(TOKEN_KEY);
+    $('app').hidden = true;
+    $('login').hidden = false;
+  }
+
+  $('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = $('login-btn');
+    const msg = $('login-msg');
+    msg.hidden = true;
+    btn.disabled = true;
+    try {
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ password: $('pw').value }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body.ok) throw new Error(body.message || 'Не вдалося увійти.');
+      token = body.token;
+      localStorage.setItem(TOKEN_KEY, token);
+      $('pw').value = '';
+      await start();
+    } catch (err) {
+      msg.textContent = err.message;
+      msg.hidden = false;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $('logout').addEventListener('click', () => {
+    if (dirty() && !confirm('Є незбережені зміни. Вийти?')) return;
+    logout();
+  });
+
+  /* ── завантаження ─────────────────────────────────────────────── */
+
+  async function start() {
+    const data = await api('/prices');
+    prices = data.prices;
+    saved = JSON.stringify(prices);
+    active = 0;
+    $('not-persistent').hidden = data.persistent;
+    $('meta').textContent = data.meta
+      ? 'Востаннє змінено: ' + new Date(data.meta.at).toLocaleString('uk-UA')
+      : 'Показано початковий прайс';
+    $('login').hidden = true;
+    $('app').hidden = false;
+    render();
+  }
+
+  /* ── малювання ────────────────────────────────────────────────── */
+
+  function render() {
+    const cats = $('cats');
+    cats.innerHTML = '';
+    prices.forEach((c, i) => {
+      const b = document.createElement('button');
+      b.className = 'cat-tab';
+      b.type = 'button';
+      b.setAttribute('role', 'tab');
+      b.setAttribute('aria-selected', String(i === active));
+      b.innerHTML = '';
+      b.append(c.label || '(без назви)');
+      const n = document.createElement('span');
+      n.className = 'n';
+      n.textContent = c.rows.length;
+      b.append(n);
+      b.addEventListener('click', () => { active = i; render(); });
+      cats.append(b);
+    });
+
+    const cat = prices[active];
+    $('cat-body').hidden = !cat;
+    if (!cat) return;
+
+    $('cat-label').value = cat.label;
+    $('cat-left').disabled = active === 0;
+    $('cat-right').disabled = active === prices.length - 1;
+    $('cat-del').disabled = prices.length <= 1;
+
+    const tb = $('rows');
+    tb.innerHTML = '';
+    cat.rows.forEach((row, i) => tb.append(rowEl(row, i, cat.rows.length)));
+  }
+
+  function cell(row, key, cls, placeholder) {
+    const td = document.createElement('td');
+    if (cls) td.className = cls;
+    const input = document.createElement('input');
+    input.className = 'input';
+    input.value = row[key];
+    if (placeholder) input.placeholder = placeholder;
+    input.addEventListener('input', () => { row[key] = input.value; touch(); });
+    td.append(input);
+    return td;
+  }
+
+  function rowEl(row, i, total) {
+    const tr = document.createElement('tr');
+    tr.append(cell(row, 'service', '', 'Назва послуги'));
+    tr.append(cell(row, 'price', 'col-price', 'напр. 500 або 500–1000'));
+    tr.append(cell(row, 'time', 'col-time', 'напр. 45–90'));
+
+    const act = document.createElement('td');
+    act.className = 'col-act';
+    act.append(
+      iconBtn('↑', 'Вище', i === 0, () => move(i, -1)),
+      iconBtn('↓', 'Нижче', i === total - 1, () => move(i, 1)),
+      iconBtn('✕', 'Видалити', false, () => {
+        prices[active].rows.splice(i, 1);
+        touch(); render();
+      }, true)
+    );
+    tr.append(act);
+    return tr;
+  }
+
+  function iconBtn(label, title, disabled, onClick, danger) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'icon-btn' + (danger ? ' danger' : '');
+    b.textContent = label;
+    b.title = title;
+    b.disabled = disabled;
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function move(i, delta) {
+    const rows = prices[active].rows;
+    const j = i + delta;
+    if (j < 0 || j >= rows.length) return;
+    [rows[i], rows[j]] = [rows[j], rows[i]];
+    touch(); render();
+  }
+
+  function touch() {
+    const m = $('msg');
+    m.className = 'msg';
+    m.textContent = dirty() ? 'Є незбережені зміни' : '';
+  }
+
+  /* ── правки категорій ─────────────────────────────────────────── */
+
+  $('cat-label').addEventListener('input', (e) => {
+    prices[active].label = e.target.value;
+    touch();
+    // Перемальовуємо лише вкладки, щоб не збивати фокус з поля вводу.
+    const tab = $('cats').children[active];
+    if (tab) tab.firstChild.textContent = e.target.value || '(без назви)';
+  });
+
+  $('cat-left').addEventListener('click', () => swapCat(-1));
+  $('cat-right').addEventListener('click', () => swapCat(1));
+
+  function swapCat(delta) {
+    const j = active + delta;
+    if (j < 0 || j >= prices.length) return;
+    [prices[active], prices[j]] = [prices[j], prices[active]];
+    active = j;
+    touch(); render();
+  }
+
+  $('cat-del').addEventListener('click', () => {
+    const cat = prices[active];
+    if (!confirm(`Видалити категорію «${cat.label}» разом із ${cat.rows.length} послугами?`)) return;
+    prices.splice(active, 1);
+    active = Math.max(0, active - 1);
+    touch(); render();
+  });
+
+  $('add-cat').addEventListener('click', () => {
+    const id = 'cat' + Date.now().toString(36);
+    prices.push({ id, label: 'Нова категорія', rows: [] });
+    active = prices.length - 1;
+    touch(); render();
+    $('cat-label').focus();
+    $('cat-label').select();
+  });
+
+  $('add-row').addEventListener('click', () => {
+    prices[active].rows.push({ service: '', price: '', time: '' });
+    touch(); render();
+    const inputs = $('rows').querySelectorAll('tr:last-child input');
+    inputs[0]?.focus();
+  });
+
+  /* ── збереження ───────────────────────────────────────────────── */
+
+  $('save').addEventListener('click', async () => {
+    const btn = $('save');
+    const m = $('msg');
+    btn.disabled = true;
+    m.className = 'msg';
+    m.textContent = 'Зберігаю…';
+    try {
+      const res = await api('/prices', { method: 'PUT', body: JSON.stringify({ prices }) });
+      prices = res.prices;
+      saved = JSON.stringify(prices);
+      active = Math.min(active, prices.length - 1);
+      render();
+      m.className = 'msg ok';
+      m.textContent = res.visibleInSec
+        ? `Збережено. На сайті зʼявиться протягом ${res.visibleInSec} с.`
+        : 'Збережено.';
+    } catch (err) {
+      m.className = 'msg err';
+      m.textContent = err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $('revert').addEventListener('click', () => {
+    if (!dirty()) return;
+    if (!confirm('Скасувати всі незбережені зміни?')) return;
+    prices = JSON.parse(saved);
+    active = Math.min(active, prices.length - 1);
+    render(); touch();
+  });
+
+  $('reset').addEventListener('click', async () => {
+    if (!confirm('Повернути прайс до початкового? Поточні ціни буде замінено.')) return;
+    const m = $('msg');
+    try {
+      const res = await api('/prices/reset', { method: 'POST' });
+      prices = res.prices;
+      saved = JSON.stringify(prices);
+      active = 0;
+      render();
+      m.className = 'msg ok';
+      m.textContent = 'Повернуто початковий прайс.';
+    } catch (err) {
+      m.className = 'msg err';
+      m.textContent = err.message;
+    }
+  });
+
+  addEventListener('beforeunload', (e) => {
+    if (dirty()) e.preventDefault();
+  });
+
+  /* ── старт ────────────────────────────────────────────────────── */
+
+  if (token) {
+    start().catch(() => logout());
+  }
+})();
+</script>
+</body>
+</html>

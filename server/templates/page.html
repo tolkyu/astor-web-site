@@ -5,6 +5,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Астор — автосервіс</title>
+<link rel="icon" href="/assets/logo-mark.png" type="image/png" />
 <script src="./ds-base.js"></script>
 <style>
 /* Астор brand override — tokens re-pointed at the logo's palette:
@@ -360,118 +361,7 @@ body[data-baselines]::after {
   <section class="prices" id="prices">
     <span class="kicker">Орієнтовні ціни</span>
     <h2 class="prices-title">Вартість основних робіт</h2>
-    <div class="seg" role="tablist" aria-label="Категорії послуг">
-      <label class="seg-opt"><input type="radio" name="price-cat" value="to" checked /> ТО та рідини</label>
-      <label class="seg-opt"><input type="radio" name="price-cat" value="belts" /> Ремені та ланцюги</label>
-      <label class="seg-opt"><input type="radio" name="price-cat" value="diag" /> Діагностика</label>
-      <label class="seg-opt"><input type="radio" name="price-cat" value="brakes" /> Гальма</label>
-      <label class="seg-opt"><input type="radio" name="price-cat" value="engine" /> Двигун</label>
-      <label class="seg-opt"><input type="radio" name="price-cat" value="chassis" /> Ходова та кермо</label>
-      <label class="seg-opt"><input type="radio" name="price-cat" value="detail" /> Детейлінг</label>
-    </div>
-
-    <div class="price-pane" data-cat="to">
-      <table class="table price-table">
-        <thead><tr><th>Послуга</th><th>Вартість від, грн</th><th>Час, хв</th></tr></thead>
-        <tbody>
-          <tr><td>ТО комплекс - легковий/кросовер: олива, масляний, паливний, повітряний і салонний фільтри + діагностика</td><td>800</td><td>60–120</td></tr>
-          <tr><td>Заміна моторної оливи + масляного фільтра</td><td>500</td><td>45–60</td></tr>
-          <tr><td>Заміна охолоджувальної рідини (антифризу)</td><td>1500</td><td>120–360</td></tr>
-          <tr><td>Заміна гальмівної рідини</td><td>600</td><td>60–120</td></tr>
-          <tr><td>Заміна рідини гідропідсилювача</td><td>800</td><td>60–120</td></tr>
-          <tr><td>Заміна оливи в МКПП</td><td>500–1000</td><td>45–120</td></tr>
-          <tr><td>Заміна оливи в передньому мосту</td><td>500</td><td>45–120</td></tr>
-          <tr><td>Заміна оливи в роздатковій коробці</td><td>500</td><td>45–120</td></tr>
-          <tr><td>Заміна оливи в задньому мосту</td><td>500</td><td>45–120</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="price-pane" data-cat="belts" hidden>
-      <table class="table price-table">
-        <thead><tr><th>Послуга</th><th>Вартість від, грн</th><th>Час, хв</th></tr></thead>
-        <tbody>
-          <tr><td>Заміна ременя (ланцюга) ГРМ</td><td>від 2000</td><td>6 год – 3 доби</td></tr>
-          <tr><td>Заміна ременя (ланцюга) генератора, помпи охолоджувальної рідини</td><td>800–4000</td><td>60–480 хв</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="price-pane" data-cat="diag" hidden>
-      <table class="table price-table">
-        <thead><tr><th>Послуга</th><th>Вартість від, грн</th><th>Час, хв</th></tr></thead>
-        <tbody>
-          <tr><td>Комплексна діагностика: ходова, рідини, ремені, ролики, герметичність вузлів - легковий/позашляховик</td><td>500</td><td>45–90</td></tr>
-          <tr><td>Ендоскопія двигуна - 4/6/8 циліндрів</td><td>1000/1500/2000</td><td>60–180</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="price-pane" data-cat="brakes" hidden>
-      <table class="table price-table">
-        <thead><tr><th>Послуга</th><th>Вартість від, грн</th><th>Час, хв</th></tr></thead>
-        <tbody>
-          <tr><td>Заміна гальмівних колодок + профілактика направляючих супорта (за пару)</td><td>1000</td><td>90–180 хв</td></tr>
-          <tr><td>Заміна гальмівних дисків - легковий/кросовер (позашляховик/преміум)</td><td>1000</td><td>90–270 хв</td></tr>
-          <tr><td>Профілактика направляючих супорта (за пару)</td><td>1000</td><td>90–180 хв</td></tr>
-          <tr><td>Заміна ремкомплекту супорта</td><td>1000</td><td>90–180 хв</td></tr>
-          <tr><td>Заміна барабанних гальмівних колодок (за колісну пару)</td><td>1000</td><td>90–180 хв</td></tr>
-          <tr><td>Заміна гальмівного шлангу (з прокачкою системи)</td><td>1000</td><td>90–360 хв</td></tr>
-          <tr><td>Заміна робочого гальмівного циліндра (з прокачкою системи)</td><td>1000–3000</td><td>90 хв – 2 доби</td></tr>
-          <tr><td>Прокачування справної гальмівної системи</td><td>600</td><td>60–180 хв</td></tr>
-          <tr><td>Заміна колодок ручного гальма</td><td>1000–2000</td><td>60–360 хв</td></tr>
-          <tr><td>Регулювання справної системи ручного гальма</td><td>500–1500</td><td>60–360 хв</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="price-pane" data-cat="engine" hidden>
-      <table class="table price-table">
-        <thead><tr><th>Послуга</th><th>Вартість від, грн</th><th>Час, хв</th></tr></thead>
-        <tbody>
-          <tr><td>Заміна комплекту свічок запалювання</td><td>200–1200</td><td>45–240 хв</td></tr>
-          <tr><td>Заміна прокладки клапанної кришки</td><td>600–2000</td><td>60–360 хв</td></tr>
-          <tr><td>Зняття/установка впускного колектора</td><td>600</td><td>60–360 хв</td></tr>
-          <tr><td>Прокладка ГБЦ</td><td>4000–20000</td><td>1–4 дні</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="price-pane" data-cat="chassis" hidden>
-      <table class="table price-table">
-        <thead><tr><th>Послуга</th><th>Вартість від, грн</th><th>Час, хв</th></tr></thead>
-        <tbody>
-          <tr><td>Заміна кермового наконечника</td><td>500</td><td>60–180</td></tr>
-          <tr><td>Заміна кермової тяги</td><td>500</td><td>60–180</td></tr>
-          <tr><td>Прокачування системи гідропідсилювача</td><td>500</td><td>60–180</td></tr>
-          <tr><td>Зняття/установка рульової рейки</td><td>3000</td><td>60–180</td></tr>
-          <tr><td>Заміна стійок стабілізатора</td><td>500</td><td>60–180</td></tr>
-          <tr><td>Заміна втулок стабілізатора</td><td>500</td><td>60–180</td></tr>
-          <tr><td>Заміна сайлентблоків переднього важеля (за штуку)</td><td>500</td><td>60–180</td></tr>
-          <tr><td>Заміна кульової опори / пресована</td><td>500/1500</td><td>60–180</td></tr>
-          <tr><td>Заміна підшипника маточини</td><td>1000</td><td>60–180</td></tr>
-          <tr><td>Заміна ШРУСу зовнішнього</td><td>1000</td><td>60–180</td></tr>
-          <tr><td>Заміна ШРУСу внутрішнього</td><td>1000</td><td>60–180</td></tr>
-          <tr><td>Зняття/установка підрамника</td><td>1000</td><td>60–180</td></tr>
-          <tr><td>Заміна переднього амортизатора</td><td>1000</td><td>60–180</td></tr>
-          <tr><td>Заміна заднього амортизатора</td><td>1000</td><td>60–180</td></tr>
-          <tr><td>Заміна сайлентблока задньої цапфи</td><td>1000</td><td>60–180</td></tr>
-          <tr><td>Заміна сайлентблоків балки</td><td>1500</td><td>60–180</td></tr>
-          <tr><td>Заміна сальника півосі (без урахування зняття півосі)</td><td>500</td><td>60–180</td></tr>
-          <tr><td>Заміна заднього поперечного важеля</td><td>500</td><td>60–180</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="price-pane" data-cat="detail" hidden>
-      <table class="table price-table">
-        <thead><tr><th>Послуга</th><th>Вартість від, грн</th><th>Час, хв</th></tr></thead>
-        <tbody>
-          <tr><td>Полірування фар</td><td>500</td><td>45–90</td></tr>
-          <tr><td>Хімчистка сидінь</td><td>500</td><td>45–90</td></tr>
-        </tbody>
-      </table>
-    </div>
+    <!--PRICES-->
 
     <p class="price-note">Ціни орієнтовні - точну вартість і строки підтверджуємо після діагностики, до початку робіт.</p>
   </section>

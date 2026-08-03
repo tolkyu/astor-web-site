@@ -9,6 +9,8 @@ import express from 'express';
 import path from 'node:path';
 import { ROOT, config } from './config.js';
 import { router } from './routes.js';
+import { adminRouter } from './adminRoutes.js';
+import { cacheHeader, renderPage } from './render.js';
 
 export function buildApp() {
   const app = express();
@@ -57,9 +59,29 @@ export function buildApp() {
     });
   }
 
-  app.use(express.json({ limit: '16kb' }));
+  // Прайс може бути великим (сотні рядків), тож ліміт тіла більший за
+  // 16kb, яких вистачало для форми запису.
+  app.use(express.json({ limit: '512kb' }));
 
   app.use('/api', router);
+  app.use('/api/admin', adminRouter);
+
+  /* ── Публічна сторінка ──────────────────────────────────────────────
+     Збирається на сервері з актуальним прайсом, а не віддається статикою:
+     пошуковик бачить готові ціни, відвідувач не бачить їх підміни. Кеш на
+     CDN тримає швидкість статики — див. cacheHeader().                 */
+  const servePage = async (req, res, next) => {
+    try {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Cache-Control', cacheHeader());
+      res.send(await renderPage());
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  app.get('/', servePage);
+  app.get('/index.html', servePage);
 
   /* ── Статика ────────────────────────────────────────────────────────
      На Vercel вимкнено: статику роздає CDN платформи, а функція займається
