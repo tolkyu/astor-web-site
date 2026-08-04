@@ -322,9 +322,9 @@ body[data-baselines]::after {
 </style>
 
 <!-- Структуровані дані для Google: тип AutoRepair — саме він дає картку
-     локального автосервісу в пошуку й на картах. Графік роботи (
-     openingHoursSpecification) свідомо не вказано: реальних годин у проєкті
-     немає, а вигаданий графік гірший за його відсутність. -->
+     локального автосервісу в пошуку й на картах. Графік має збігатися з
+     Google Business Profile: розбіжність між ними Google трактує як
+     суперечність і може проігнорувати обидва джерела. -->
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -345,6 +345,20 @@ body[data-baselines]::after {
     "addressCountry": "UA"
   },
   "geo": { "@type": "GeoCoordinates", "latitude": 47.9707646, "longitude": 33.413305 },
+  "openingHoursSpecification": [
+    {
+      "@type": "OpeningHoursSpecification",
+      "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+      "opens": "09:00",
+      "closes": "17:00"
+    },
+    {
+      "@type": "OpeningHoursSpecification",
+      "dayOfWeek": "Sunday",
+      "opens": "00:00",
+      "closes": "00:00"
+    }
+  ],
   "areaServed": { "@type": "City", "name": "Кривий Ріг" },
   "hasMap": "https://www.google.com/maps/search/?api=1&query=%D0%90%D1%81%D1%82%D0%BE%D1%80+%D0%90%D0%B2%D1%82%D0%BE%D1%81%D0%B5%D1%80%D0%B2%D1%96%D1%81,+%D0%9A%D1%80%D0%B8%D0%B2%D0%B8%D0%B9+%D0%A0%D1%96%D0%B3"
 }
