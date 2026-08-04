@@ -4,8 +4,25 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Астор — автосервіс</title>
+<title>СТО у Кривому Розі — автосервіс «Астор» | Діагностика, ТО, ремонт</title>
+<meta name="description" content="Автосервіс «Астор» у Кривому Розі: чесна діагностика, заміна оливи від 500 грн, ремонт ходової, гальм, двигуна. вул. Джамбула. ☎ +380 50 560 03 58" />
+<link rel="canonical" href="https://astor.business/" />
 <link rel="icon" href="/assets/logo-mark.png" type="image/png" />
+
+<!-- Open Graph — картка при шерингу у Viber, Telegram, Facebook -->
+<meta property="og:title" content="СТО «Астор» — автосервіс у Кривому Розі" />
+<meta property="og:description" content="Прозора діагностика, чесні ціни. Заміна оливи від 500 грн. вул. Джамбула, Кривий Ріг." />
+<meta property="og:url" content="https://astor.business/" />
+<meta property="og:image" content="https://astor.business/assets/garage.jpg" />
+<meta property="og:locale" content="uk_UA" />
+<meta property="og:type" content="website" />
+
+<!-- Гео-мітки: UA-12 — код Дніпропетровської області за ISO 3166-2 -->
+<meta name="geo.region" content="UA-12" />
+<meta name="geo.placename" content="Кривий Ріг" />
+<meta name="geo.position" content="47.9707646;33.413305" />
+<meta name="ICBM" content="47.9707646, 33.413305" />
+
 <script src="./ds-base.js"></script>
 <style>
 /* Астор brand override — tokens re-pointed at the logo's palette:
@@ -303,10 +320,39 @@ body[data-baselines]::after {
       transparent calc(var(--half) + 1px) var(--leading));
 }
 </style>
+
+<!-- Структуровані дані для Google: тип AutoRepair — саме він дає картку
+     локального автосервісу в пошуку й на картах. Графік роботи (
+     openingHoursSpecification) свідомо не вказано: реальних годин у проєкті
+     немає, а вигаданий графік гірший за його відсутність. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "AutoRepair",
+  "name": "Автосервіс «Астор» — СТО у Кривому Розі",
+  "alternateName": ["СТО Астор", "Автосервис Астор Кривой Рог"],
+  "description": "СТО у Кривому Розі: діагностика, ТО, заміна оливи та технічних рідин, ремонт ходової, гальм і двигуна.",
+  "image": "https://astor.business/assets/garage.jpg",
+  "url": "https://astor.business/",
+  "telephone": "+380505600358",
+  "priceRange": "₴₴",
+  "address": {
+    "@type": "PostalAddress",
+    "streetAddress": "вулиця Джамбула",
+    "addressLocality": "Кривий Ріг",
+    "addressRegion": "Дніпропетровська область",
+    "postalCode": "50012",
+    "addressCountry": "UA"
+  },
+  "geo": { "@type": "GeoCoordinates", "latitude": 47.9707646, "longitude": 33.413305 },
+  "areaServed": { "@type": "City", "name": "Кривий Ріг" },
+  "hasMap": "https://www.google.com/maps/search/?api=1&query=%D0%90%D1%81%D1%82%D0%BE%D1%80+%D0%90%D0%B2%D1%82%D0%BE%D1%81%D0%B5%D1%80%D0%B2%D1%96%D1%81,+%D0%9A%D1%80%D0%B8%D0%B2%D0%B8%D0%B9+%D0%A0%D1%96%D0%B3"
+}
+</script>
 </head>
 <body>
 <nav class="nav">
-  <a class="nav-brand" href="#top"><img src="assets/logo-mark.png" alt="" /> Астор</a>
+  <a class="nav-brand" href="#top"><img src="assets/logo-mark.png" alt="Логотип автосервісу «Астор», Кривий Ріг" /> Астор</a>
   <a href="#services" aria-current="location">Послуги</a>
   <a href="#prices">Ціни</a>
   <a href="#map">Як нас знайти</a>
@@ -373,7 +419,7 @@ body[data-baselines]::after {
       <p class="note">Обслуговуємо та ремонтуємо легкові автомобілі так, як робили б для власного авто. Досвідчені механіки пояснюють кожну рекомендацію і показують зняті деталі - ви бачите, за що платите.</p>
     </div>
     <figure class="split-figure grayscale">
-      <img src="assets/garage.jpg" alt="Ремонтна зона автосервісу «Астор»: оглядова яма, верстак з інструментом" width="800" height="600" loading="lazy" decoding="async" />
+      <img src="assets/garage.jpg" alt="Ремонтна зона СТО «Астор» у Кривому Розі: оглядова яма, верстак з інструментом" width="800" height="600" loading="lazy" decoding="async" />
     </figure>
   </section>
 
@@ -411,7 +457,7 @@ body[data-baselines]::after {
 </section>
 
 <div class="wrap">
-  <footer>Автосервіс «Астор» · вулиця Джамбула, Кривий Ріг, 50012 · тел. +380 (50) 560 03 58 · Ціни орієнтовні, точна вартість - після діагностики</footer>
+  <footer>СТО «Астор» у Кривому Розі · вул. Джамбула, 50012 · тел. +380 (50) 560 03 58 · Ціни орієнтовні, точна вартість - після діагностики</footer>
 </div>
 
 <div class="dialog-backdrop booking-backdrop" id="booking" hidden>
