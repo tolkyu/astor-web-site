@@ -9,11 +9,34 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { config } from './config.js';
 import { getPrices } from './priceStore.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_PATH = path.join(HERE, '..', 'templates', 'page.html');
 const MARKER = '<!--PRICES-->';
+const ANALYTICS_MARKER = '<!--ANALYTICS-->';
+
+/**
+ * Vercel Web Analytics для звичайного HTML — без пакета і React-компонента,
+ * бо ні React, ні збірки тут немає.
+ *
+ * Перший тег створює чергу: якщо відвідувач клікне до того, як довантажиться
+ * основний скрипт, подія не загубиться, а ляже в чергу window.vaq.
+ *
+ * Шлях /_vercel/insights/ обслуговує сама платформа — цього маршруту не існує
+ * поза Vercel, тому локально скрипт не підключаємо: інакше на кожному
+ * відкритті сторінки в консоль падав би 404.
+ */
+const ANALYTICS_SNIPPET = [
+  '<script>window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };</script>',
+  '<script defer src="/_vercel/insights/script.js"></script>',
+].join('\n');
+
+function analyticsTags() {
+  const enabled = config.isServerless || process.env.ANALYTICS === '1';
+  return enabled ? ANALYTICS_SNIPPET : '';
+}
 
 /* Шаблон не змінюється під час роботи процесу, тож читаємо його раз.
    У serverless це виконається на холодному старті — далі з памʼяті. */
@@ -79,7 +102,9 @@ export function renderPrices(categories) {
 /** Готова сторінка. */
 export async function renderPage() {
   const categories = await getPrices();
-  return getTemplate().replace(MARKER, renderPrices(categories));
+  return getTemplate()
+    .replace(MARKER, renderPrices(categories))
+    .replace(ANALYTICS_MARKER, analyticsTags());
 }
 
 /**
