@@ -93,11 +93,12 @@
 html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 body { margin: 0; text-wrap: pretty; }
-.wrap { max-width: 1200px; margin: 0 auto; padding: 0 var(--edge); }
-/* the component demo pads the masthead with its own spacing; on the page the
-   masthead's contents take the page gutter and sit on the wrap's text axis
-   (padding-only — full-width paint such as a masthead rule is untouched) */
-.nav { padding-inline: max(var(--edge), calc((100% - 1200px) / 2 + var(--edge))); }
+/* Повноекранний макет: колонка більше не обмежена 1200px — контент іде
+   на всю ширину вікна, лишаються тільки бічні поля --edge.
+   Окремі блоки (абзаци, таблиця цін) мають власні обмеження нижче:
+   рядок тексту на 2560px був би нечитабельним. */
+.wrap { max-width: none; margin: 0 auto; padding: 0 var(--edge); }
+.nav { padding-inline: var(--edge); }
 .nav a { white-space: nowrap; }
 .nav a[aria-current='location'] { color: var(--color-accent); } /* in-page anchor, not
    a page link — 'location' is the truthful value; carry the component's active ink */
@@ -132,8 +133,11 @@ body { margin: 0; text-wrap: pretty; }
 .hero { padding: calc(4 * var(--leading)) 0 calc(3 * var(--leading)); }
 .display {
   font-family: var(--font-heading); font-weight: var(--font-heading-weight);
-  font-size: clamp(42px, 6.2vw, 84px);
-  line-height: clamp(44.5px, 6.57vw, 89px); /* law #3: ratio-governed ≈1.06 —
+  /* Стеля піднята з 84 до 132px: на повноекранному макеті заголовок,
+     що впирається в 84px, лишав половину широкого екрана порожньою.
+     Рядок росте в тій самій пропорції 1.06 (132 × 1.06 = 139.9). */
+  font-size: clamp(42px, 6.2vw, 132px);
+  line-height: clamp(44.5px, 6.57vw, 139.9px); /* law #3: ratio-governed ≈1.06 —
      Archivo's 800 sits tight and all-cap-height; the display-block lattice
      exemption (no 14px step is both tighter than the old look and clear) */
   letter-spacing: -0.02em; margin: 0;
@@ -142,7 +146,10 @@ body { margin: 0; text-wrap: pretty; }
 }
 .display .line { display: block; } /* law #1: one sentence per line */
 .hero .sub { font-size: 17px; line-height: var(--leading); max-width: var(--measure);
-  margin: calc(1.5 * var(--leading) - 1cap) 0 0;
+  /* Відступ росте разом із заголовком: 30px під 42px-кеглем на телефоні —
+     це 0.7 від кегля, а під 132px на широкому екрані те саме число дало б
+     0.23 і читалось би як злипання. Стеля 56px = рівно два кроки ритму. */
+  margin: clamp(calc(1.5 * var(--leading) - 1cap), 2.4vw, calc(2 * var(--leading))) 0 0;
   text-box: trim-both cap alphabetic; } /* 1.5 units: clears the display's descenders with cluster-tight air (law #3) */
 .hero .row { display: flex; gap: var(--space-3); flex-wrap: wrap; margin-top: var(--leading); }
 
@@ -150,9 +157,13 @@ body { margin: 0; text-wrap: pretty; }
    numerals take the accent at display size, ≥3:1 as large text per the
    system's own accent rule; the red FIELD is reserved for the close) — */
 .stats { padding: calc(2.5 * var(--leading)) 0; }
-.stats .grid { display: grid; grid-template-columns: repeat(4, auto); justify-content: space-between; gap: calc(1.5 * var(--leading)) var(--leading); }
+/* Три рівні колонки. У старому макеті їх було чотири, і перша — порожня
+   розпірка, яка зсувала показники праворуч; при space-between вона
+   схлопувалась у нуль, а на повну ширину зʼїдала б цілу чверть екрана.
+   Розпірку прибрано з розмітки, лишились три реальні показники. */
+.stats .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: calc(1.5 * var(--leading)) var(--leading); }
 .stat-num { font-family: var(--font-heading); font-weight: var(--font-heading-weight);
-  font-size: clamp(34px, 3.4vw, 48px); line-height: calc(2 * var(--leading));
+  font-size: clamp(34px, 3.4vw, 72px); line-height: 1.15em;
   color: var(--color-accent); /* display figures stay proportional — the deck's figure policy */
   margin: 0; margin-left: -0.045em; /* digits lead — the deck's "0"-population value */
   text-box: trim-both cap alphabetic; }
@@ -166,7 +177,9 @@ body { margin: 0; text-wrap: pretty; }
 /* — feature rows (the deck's ruled-toc grammar: 2px rules ON the seams,
    red square marks hanging at the numbers — drawn structure, no cards) — */
 .features { padding: calc(3 * var(--leading)) 0 calc(2.5 * var(--leading)); }
-.feature { display: grid; grid-template-columns: minmax(64px, 160px) minmax(0, 420px) minmax(0, 1fr);
+/* частки замість фіксованих 420px: на широкому екрані колонки тягнуться
+   разом із вікном, а не лишають порожнечу праворуч */
+.feature { display: grid; grid-template-columns: minmax(64px, 160px) minmax(0, 1fr) minmax(0, 1.35fr);
   gap: var(--leading) clamp(24px, 4vw, 72px); align-items: baseline;
   padding: calc(1.5 * var(--leading)) 0; }
 .feature + .feature { border-top: 2px solid var(--color-divider); } /* the ruled seam — solid, the system's weight */
@@ -182,15 +195,21 @@ body { margin: 0; text-wrap: pretty; }
   margin: 0; text-box: trim-both cap alphabetic; }
 .f-copy { font-size: 15.5px; line-height: var(--leading); margin: 0;
   color: color-mix(in srgb, var(--color-text) 78%, transparent);
-  max-width: 52ch; text-box: trim-both cap alphabetic; }
+  max-width: 70ch; text-box: trim-both cap alphabetic; }
 
 /* — prices (the doc's seven categories behind a segmented control; one
    table visible at a time — the deck's table grammar, no cards) — */
 .prices { padding: calc(3 * var(--leading)) 0 calc(2.5 * var(--leading)); }
 .prices-title { font-family: var(--font-heading); font-weight: var(--font-heading-weight);
-  font-size: 32px; line-height: calc(1.5 * var(--leading)); letter-spacing: -0.015em;
+  font-size: clamp(28px, 2.5vw, 56px); line-height: 1.2em; letter-spacing: -0.015em;
   margin: 0 0 var(--leading); text-box: trim-both cap alphabetic; }
-.prices .seg { flex-wrap: wrap; margin-bottom: var(--leading); }
+/* align-self: розділ став flex-контейнером, а він за замовчуванням розтягує
+   дітей на всю ширину — перемикач із семи кнопок перетворювався на рамку
+   через увесь екран із порожнечею праворуч */
+.prices .seg { flex-wrap: wrap; margin-bottom: var(--leading); align-self: flex-start; }
+/* Таблиця не тягнеться на всі 2560px: інакше від назви послуги до її ціни
+   око йшло б через пів екрана і рядки було б важко зіставляти. */
+.price-table { max-width: 1500px; }
 .prices .seg-opt { border-top: 1px solid transparent; }
 .price-table td:nth-child(2), .price-table th:nth-child(2),
 .price-table td:nth-child(3), .price-table th:nth-child(3) { white-space: nowrap; font-feature-settings: "tnum" 1; }
@@ -210,7 +229,7 @@ body { margin: 0; text-wrap: pretty; }
   gap: var(--leading) clamp(24px, 5vw, 96px); align-items: center;
   padding: calc(2 * var(--leading)) 0 calc(3 * var(--leading)); }
 .split-title { font-family: var(--font-heading); font-weight: var(--font-heading-weight);
-  font-size: 32px; line-height: calc(1.5 * var(--leading)); letter-spacing: -0.015em;
+  font-size: clamp(28px, 2.5vw, 56px); line-height: 1.2em; letter-spacing: -0.015em;
   margin: 0; text-box: trim-both cap alphabetic; }
 .split-copy .note { font-size: 15.5px; line-height: var(--leading);
   color: color-mix(in srgb, var(--color-text) 78%, transparent);
@@ -266,7 +285,8 @@ body { margin: 0; text-wrap: pretty; }
 .close { background: var(--color-accent); color: var(--color-bg); }
 .close .wrap { padding-top: calc(3 * var(--leading)); padding-bottom: calc(3 * var(--leading)); }
 .close h3 { font-family: var(--font-heading); font-weight: var(--font-heading-weight);
-  font-size: clamp(34px, 4.2vw, 56px); line-height: clamp(36px, 4.45vw, 59.4px); /* ≈1.06 —
+  /* та сама логіка, що й у героя: стеля піднята 56 → 88px, пропорція 1.06 */
+  font-size: clamp(34px, 4.2vw, 88px); line-height: clamp(36px, 4.45vw, 93.3px); /* ≈1.06 —
      display-grade, so it carries the display-block lattice exemption (the
      rhythm probe excludes .display and .close h3 alike) */
   letter-spacing: -0.015em; margin: 0; margin-left: -0.058em;
@@ -303,6 +323,47 @@ footer { padding: calc(2 * var(--leading)) 0; font-size: 13px; line-height: var(
   .stats .grid { grid-template-columns: repeat(2, 1fr); justify-content: start; }
   .split { grid-template-columns: 1fr; }
   .split-figure { order: -1; }
+}
+
+/* ─────────────── ПОВНОЕКРАННІ РОЗДІЛИ ───────────────
+   Кожен блок займає щонайменше висоту вікна, вміст по центру.
+
+   svh, а не vh: на мобільних vh рахується від висоти вікна БЕЗ панелей
+   браузера, тож перший екран визирав би за край і герой обрізався.
+
+   min-height, а не height: розділи, що не влазять (таблиця цін на 18
+   рядків, довгий текст на вузькому екрані), просто виростають, а не
+   ховають вміст під обрізом.
+
+   Виняток для героя — з нього віднімається висота навігації, інакше
+   перший екран разом із шапкою був би на 61px вищий за вікно. */
+:root { --nav-h: 61px; }
+
+.hero,
+.stats,
+.features,
+.prices,
+.split,
+.map,
+.quote,
+.close {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.hero { min-height: calc(100svh - var(--nav-h)); }
+/* .split — сітка з двох колонок, її не можна робити flex-контейнером,
+   інакше фото й текст стануть один під одним */
+.split { display: grid; align-content: center; }
+/* .close фарбує тло на всю ширину, а центрувати треба внутрішню обгортку */
+.close { justify-content: center; }
+
+@media (max-width: 720px) {
+  /* На телефоні розтягувати короткі блоки на весь екран немає сенсу:
+     вийшли б порожні прогалини і зайве гортання. Лишаємо натуральну
+     висоту, повноекранним тримаємо тільки перший екран. */
+  .stats, .features, .prices, .split, .map, .quote, .close { min-height: 0; }
 }
 
 /* Review aid: the 28px rhythm drawn as hairlines — debug chrome, toggled by
@@ -388,7 +449,6 @@ body[data-baselines]::after {
 
   <section class="stats" aria-label="Астор у цифрах">
     <div class="grid">
-      <div></div>
       <div><p class="stat-num">500 грн</p><p class="stat-label">Заміна моторної оливи з фільтром - від</p></div>
       <div><p class="stat-num">45 хв</p><p class="stat-label">Найшвидша послуга</p></div>
       <div><p class="stat-num">7</p><p class="stat-label">Напрямків робіт - від ТО до детейлінгу</p></div>
