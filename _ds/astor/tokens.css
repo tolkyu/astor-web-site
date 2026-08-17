@@ -1,0 +1,96 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Астор — токени дизайн-системи.
+
+   Значення перенесені з експорту системи (colors / typography / spacing /
+   other) без правок. Єдине доповнення — блок сумісності в кінці файлу:
+   аліаси під старі імена (--color-*, --font-heading, --space-*), якими
+   користується шапка сторінки. Шапку домовлено не чіпати, тож замість
+   переписування її правил ми лишаємо старі імена робочими.
+
+   Шрифти підключає <link> у <head> сторінки, а не @import: імпорт усередині
+   стилю — це додатковий раунд-тріп, який блокує перший рендер.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── колір ─── */
+:root{
+/* base */
+--ink-900:#1B2434;--ink-800:#232F44;--ink-700:#2E3A50;--ink-500:#5A6475;--ink-300:#9AA1AC;
+--canvas-100:#D5D2CD;--canvas-50:#E4E2DE;--canvas-0:#EFEEEB;--paper:#F6F5F2;
+--orange-500:#F0512C;--orange-600:#D8431F;--orange-100:#FBDCD3;
+--teal-500:#2E7C8F;--teal-100:#D7E8EC;
+--green-600:#3E7C4F;--red-600:#C6392B;--amber-600:#C07A1E;
+/* semantic */
+--text-display:var(--ink-800);--text-body:var(--ink-800);--text-muted:var(--ink-500);--text-inverse:var(--paper);--text-accent:var(--orange-500);
+--surface-page:var(--canvas-100);--surface-card:var(--canvas-0);--surface-raised:var(--paper);--surface-ink:var(--ink-800);
+--accent:var(--orange-500);--accent-hover:var(--orange-600);--accent-soft:var(--orange-100);
+/* Додано до експорту: помаранч для ДРІБНОГО тексту. --orange-500 дає на канві
+   2.3:1, --orange-600 — 2.9:1; для 13–15px потрібно 4.5:1. Цей крок дає 5.0:1
+   на канві та 6.5:1 на світлих плашках, тож придатний скрізь на сторінці. */
+--accent-text:#9C2D12;
+--border-strong:var(--ink-800);--border-subtle:rgba(35,47,68,.25);--border-hairline:rgba(35,47,68,.14);
+--focus-ring:0 0 0 2px var(--surface-page),0 0 0 4px var(--orange-500);
+--success:var(--green-600);--danger:var(--red-600);--warning:var(--amber-600);--info:var(--teal-500);
+}
+
+/* ─── типографіка ─── */
+:root{
+--font-display:'Archivo',sans-serif;--font-display-black:'Archivo Black','Archivo',sans-serif;--font-ui:'Space Grotesk',sans-serif;
+/* scale */
+--fs-giant:clamp(96px,18vw,280px);--fs-display:64px;--fs-h1:44px;--fs-h2:32px;--fs-h3:24px;--fs-lead:18px;--fs-body:15px;--fs-small:13px;--fs-micro:11px;
+--lh-display:.92;--lh-tight:1.1;--lh-body:1.6;
+--ls-display:-0.01em;--ls-caps:0.18em;--ls-micro:0.14em;
+--fw-black:900;--fw-bold:700;--fw-semibold:600;--fw-medium:500;--fw-regular:400;
+}
+
+/* ═══ проєктна поправка до шкали ═══════════════════════════════════════
+   Експорт розрахований на щільний редакційний макет, де кегль працює
+   поруч із сусіднім текстом. На повноекранному лендінгу кожен розділ
+   стоїть на власному екрані з великими полями, і 15px губилися серед
+   порожнечі — блок читався як «мало вмісту, багато повітря».
+
+   Текстові щаблі підняті на один крок, дисплейні лишились як в експорті:
+   заголовки й так ростуть від ширини вікна через clamp(). Крок ритму
+   сторінки перерахований під новий кегль (17 × 1.6 = 27.2 → 28px). */
+:root{
+--fs-lead:21px;--fs-body:17px;--fs-small:15px;--fs-micro:12px;--fs-h3:28px;
+}
+
+/* ─── ритм ─── */
+:root{
+--sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:24px;--sp-6:32px;--sp-7:48px;--sp-8:64px;--sp-9:96px;--sp-10:140px;
+--page-gutter:clamp(24px,5vw,72px);--content-max:1280px;
+}
+
+/* ─── форма, тінь, рух ─── */
+:root{
+--radius-0:0px;--radius-1:2px;--radius-pill:999px;--radius-circle:50%;
+--shadow-card:0 2px 0 rgba(35,47,68,.18);--shadow-pop:6px 6px 0 rgba(35,47,68,1);--shadow-float:0 16px 40px rgba(27,36,52,.22);
+--ease-out:cubic-bezier(.22,1,.36,1);--dur-fast:140ms;--dur-med:260ms;
+--dotted-border:1.5px dashed var(--border-strong);
+}
+
+/* ═══ сумісність зі старими іменами (шапка сторінки) ═══════════════════
+   --color-bg тут означає «колір реверсивного тексту на залитій плашці»
+   (єдина його роль у блоці шапки), тому веде на --paper, а не на канву:
+   #D5D2CD по помаранчевому дало б 2.4:1, #F6F5F2 дає 3.2:1 — той самий
+   рівень, що й у попередньому макеті для підпису кнопки. */
+:root{
+--color-bg:var(--paper);
+--color-text:var(--text-body);
+--color-divider:var(--border-strong);
+--color-surface:var(--surface-card);
+/* Шапка фарбує цим активне й наведене посилання — а це 14px, тобто поріг
+   4.5:1. Базовий помаранч дає на канві 2.3:1, тож аліас веде на глибший
+   крок: відтінок і поведінка ті самі, читність нормальна. Заливка кнопки
+   в шапці бере --accent напряму (див. .nav .btn-primary у styles.css). */
+--color-accent:var(--accent-text);
+--color-accent-100:var(--orange-100);
+--color-accent-600:var(--orange-600);
+--color-accent-700:var(--accent-text);
+--font-heading:var(--font-display);
+--font-heading-weight:800;
+--font-body:var(--font-ui);
+--space-1:var(--sp-1);--space-2:var(--sp-2);--space-3:var(--sp-3);--space-4:var(--sp-4);--space-6:var(--sp-5);--space-8:var(--sp-6);
+--radius-sm:var(--radius-0);--radius-md:var(--radius-0);--radius-lg:var(--radius-0);
+--shadow-sm:var(--shadow-card);--shadow-md:var(--shadow-card);--shadow-lg:var(--shadow-float);
+}
