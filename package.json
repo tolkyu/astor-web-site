@@ -5,9 +5,11 @@
   "description": "Лендінг автосервісу «Астор» + бекенд для заявок у Telegram",
   "type": "module",
   "engines": {
-    "node": ">=20.11"
+    "node": ">=22"
   },
   "scripts": {
+    "test": "node --test tests/*.test.js",
+    "check": "node scripts/check.js",
     "start": "node server/server.js",
     "dev": "node --watch server/server.js",
     "tg:chat-id": "node server/scripts/chat-id.js",

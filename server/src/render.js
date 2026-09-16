@@ -1,124 +1,36 @@
-/**
- * Складання публічної сторінки: шаблон + актуальний прайс із Redis.
- *
- * Рендер саме на сервері (а не в браузері) з двох причин: пошуковики
- * отримують готовий HTML, і відвідувач ніколи не бачить, як ціни
- * перемикаються з застарілих на свіжі. Швидкість не страждає, бо відповідь
- * кешується на CDN — див. cacheHeader() нижче.
- */
 import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { config } from './config.js';
+import { randomUUID } from 'node:crypto';
 import { getPrices } from './priceStore.js';
-
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const TEMPLATE_PATH = path.join(HERE, '..', 'templates', 'page.html');
-const MARKER = '<!--PRICES-->';
-const ANALYTICS_MARKER = '<!--ANALYTICS-->';
-
-/**
- * Vercel Web Analytics для звичайного HTML — без пакета і React-компонента,
- * бо ні React, ні збірки тут немає.
- *
- * Перший тег створює чергу: якщо відвідувач клікне до того, як довантажиться
- * основний скрипт, подія не загубиться, а ляже в чергу window.vaq.
- *
- * Шлях /_vercel/insights/ обслуговує сама платформа — цього маршруту не існує
- * поза Vercel, тому локально скрипт не підключаємо: інакше на кожному
- * відкритті сторінки в консоль падав би 404.
- */
-const ANALYTICS_SNIPPET = [
-  '<script>window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };</script>',
-  '<script defer src="/_vercel/insights/script.js"></script>',
-].join('\n');
-
-function analyticsTags() {
-  const enabled = config.isServerless || process.env.ANALYTICS === '1';
-  return enabled ? ANALYTICS_SNIPPET : '';
-}
-
-/* Шаблон не змінюється під час роботи процесу, тож читаємо його раз.
-   У serverless це виконається на холодному старті — далі з памʼяті. */
-let template = null;
-function getTemplate() {
-  template ??= readFileSync(TEMPLATE_PATH, 'utf8');
-  return template;
-}
-
-/** Екранування для вставки в текстовий вузол або атрибут. */
-function esc(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-/** Розмітка перемикача категорій + таблиць — байт-у-байт як була статична. */
+import { site } from './site.js';
+export const esc = value => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const template = new URL('../templates/page.html', import.meta.url);
+const timeLabel = value => /^\d+[–\-\d\s]*$/.test(value) ? value + ' хв' : value;
 export function renderPrices(categories) {
-  const seg = categories
-    .map(
-      (c, i) =>
-        `      <label class="seg-opt"><input type="radio" name="price-cat" value="${esc(c.id)}"${
-          i === 0 ? ' checked' : ''
-        } /> ${esc(c.label)}</label>`
-    )
-    .join('\n');
-
-  const panes = categories
-    .map((c, i) => {
-      const rows = c.rows
-        .map(
-          (r) =>
-            `          <tr><td>${esc(r.service)}</td><td>${esc(r.price)}</td><td>${esc(r.time)}</td></tr>`
-        )
-        .join('\n');
-
-      return [
-        `    <div class="price-pane" data-cat="${esc(c.id)}"${i === 0 ? '' : ' hidden'}>`,
-        '      <table class="table price-table">',
-        '        <thead><tr><th>Послуга</th><th>Вартість від, грн</th><th>Час, хв</th></tr></thead>',
-        '        <tbody>',
-        rows,
-        '        </tbody>',
-        '      </table>',
-        '    </div>',
-      ].join('\n');
-    })
-    .join('\n\n');
-
-  // Перший рядок без відступу: у шаблоні маркер уже стоїть на потрібній
-  // позиції, і власний відступ подвоївся б.
-  return [
-    '<div class="seg" role="tablist" aria-label="Категорії послуг">',
-    seg,
-    '    </div>',
-    '',
-    panes,
-  ].join('\n');
+  return categories.map((c, i) => `<details class="price-category" id="price-${esc(c.id)}"${i === 0 ? ' open' : ''}>
+    <summary><h3>${esc(c.label)}</h3><span>${c.rows.length} послуг</span><span class="expand" aria-hidden="true">+</span></summary>
+    <table><caption class="sr-only">${esc(c.label)} — орієнтовна вартість робіт</caption>
+    <thead><tr><th scope="col">Робота</th><th scope="col">Від, грн</th><th scope="col">Орієнтовний час</th><th scope="col"><span class="sr-only">Заявка</span></th></tr></thead>
+    <tbody>${c.rows.map(r => `<tr data-service="${esc(r.service.toLocaleLowerCase('uk'))}"><td>${esc(r.service)}</td><td class="price-value">${esc(r.price)}</td><td class="price-time">${esc(timeLabel(r.time))}</td><td><a class="service-link" href="#request" data-service-name="${esc(r.service)}" aria-label="Залишити заявку: ${esc(r.service)}">Заявка <span aria-hidden="true">↗</span></a></td></tr>`).join('') || '<tr><td colspan="4">Перелік робіт уточнюйте телефоном.</td></tr>'}</tbody></table>
+  </details>`).join('\n');
 }
-
-/** Готова сторінка. */
+function popular(categories) {
+  const preferred = ['to', 'diag', 'brakes'].map(id => categories.find(c => c.id === id)?.rows[id === 'to' ? 1 : 0]).filter(Boolean);
+  const rows = preferred.length ? preferred : categories.flatMap(c => c.rows).slice(0, 3);
+  return rows.map((r, i) => `<article class="popular-item"><span class="item-index">0${i + 1}</span><h3>${esc(r.service)}</h3><p class="popular-price">від ${esc(r.price)} <span>грн</span></p><p class="muted">${esc(timeLabel(r.time))}</p><a href="#request" data-service-name="${esc(r.service)}">Залишити заявку <span aria-hidden="true">↗</span></a></article>`).join('');
+}
 export async function renderPage() {
-  const categories = await getPrices();
-  return getTemplate()
-    .replace(MARKER, renderPrices(categories))
-    .replace(ANALYTICS_MARKER, analyticsTags());
+  const categories = await getPrices({ fresh: true });
+  const schema = {
+    '@context': 'https://schema.org', '@type': 'AutoRepair', name: site.name,
+    url: site.url, telephone: site.phone, image: site.url + '/assets/garage.jpg',
+    address: { '@type': 'PostalAddress', streetAddress: site.address, addressLocality: site.city, addressCountry: 'UA' },
+    geo: { '@type': 'GeoCoordinates', latitude: 47.9707646, longitude: 33.413305 },
+    openingHoursSpecification: [{ '@type': 'OpeningHoursSpecification', dayOfWeek: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'], opens: '09:00', closes: '17:00' }],
+    hasMap: site.map,
+  };
+  const values = { ...site, requestKey: randomUUID(), prices: renderPrices(categories), popular: popular(categories), schema: JSON.stringify(schema).replace(/</g, '\\u003c'),
+    analytics: process.env.VERCEL || process.env.ANALYTICS === '1' ? '<script defer src="/_vercel/insights/script.js"></script>' : '' };
+  return readFileSync(template, 'utf8').replace(/\{\{(\w+)\}\}/g, (_, key) => ['prices','popular','schema','analytics'].includes(key) ? values[key] : esc(values[key]));
 }
-
-/**
- * Кешування на CDN Vercel.
- *
- *   s-maxage=60             — вузол віддає готову сторінку з кешу хвилину,
- *                             тобто функція не запускається на кожен запит
- *                             і сторінка приходить так само швидко, як статика;
- *   stale-while-revalidate  — коли хвилина минула, відвідувач усе одно
- *                             миттєво отримує стару копію, а свіжу вузол
- *                             підтягує у фоні. Ніхто ніколи не чекає.
- *
- * Практичний наслідок: правки в адмінці зʼявляються на сайті протягом ~60 с.
- */
-export function cacheHeader() {
-  return 'public, max-age=0, s-maxage=60, stale-while-revalidate=600';
-}
+// Зміни прайсу видно на наступному відкритті сторінки.
+export const cacheHeader = () => 'no-store';

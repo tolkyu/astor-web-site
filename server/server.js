@@ -7,6 +7,17 @@ import { buildApp } from './src/app.js';
 import { verifyBot } from './src/telegram.js';
 import { startBot, stopBot } from './src/bot.js';
 import { redisConfigured, redisPing } from './src/redis.js';
+import { retryPending } from './src/bookings.js';
+
+// Постійний сервер повторює доставку. Serverless запускає захищений /api/jobs/retry.
+let retryRunning = false;
+const retryTimer = setInterval(async () => {
+  if (retryRunning) return;
+  retryRunning = true;
+  try { await retryPending(); } catch (err) { console.error('[retry]', err.message); }
+  finally { retryRunning = false; }
+}, 60000);
+retryTimer.unref();
 
 try {
   assertConfig();

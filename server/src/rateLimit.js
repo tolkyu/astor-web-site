@@ -6,8 +6,8 @@
  *             бо памʼять функції вмирає разом із запитом.
  *  • памʼять — запасний варіант для локальної розробки.
  *
- * Якщо Redis раптом недоступний, запит ПРОПУСКАЄМО: втратити заявку клієнта
- * гірше, ніж пропустити зайвий запит спамера.
+ * При відмові Redis публічний API має резервний локальний лічильник.
+ * Вхід адміністратора у strict-режимі тимчасово блокується.
  */
 import { redis, redisConfigured } from './redis.js';
 
@@ -67,7 +67,7 @@ async function hitRedis(key, windowMs, max) {
 
 /* ── middleware ─────────────────────────────────────────────────────── */
 
-export function rateLimit(name, windowMs, max) {
+export function rateLimit(name, windowMs, max, { strict = false } = {}) {
   return async (req, res, next) => {
     const key = `rl:${name}:${req.ip}`;
     let state;
@@ -77,8 +77,9 @@ export function rateLimit(name, windowMs, max) {
         ? await hitRedis(key, windowMs, max)
         : hitMemory(key, windowMs, max);
     } catch (err) {
-      console.error('[rateLimit] Redis недоступний, пропускаю запит:', err.message);
-      return next();
+      console.error('[rateLimit] Redis недоступний:', err.message);
+      if (strict) return res.status(503).json({ ok: false, message: 'Вхід тимчасово недоступний. Спробуйте пізніше.' });
+      state = hitMemory(key, windowMs, max);
     }
 
     res.setHeader('RateLimit-Limit', max);

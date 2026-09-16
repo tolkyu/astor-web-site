@@ -1,154 +1,56 @@
 import { Router } from 'express';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { config, telegramConfigured } from './config.js';
-import { escapeHtml, sendMessage } from './telegram.js';
 import { rateLimit } from './rateLimit.js';
-import { saveSubmission } from './store.js';
-import { formatPhone, validateBooking, validateLead } from './validate.js';
+import { validateBooking } from './validate.js';
 import { handleWebhook } from './bot.js';
 import { redisConfigured, redisPing } from './redis.js';
-
-export const router = Router();
-
-const when = () =>
-  new Intl.DateTimeFormat('uk-UA', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-    timeZone: config.timezone,
-  }).format(new Date());
-
-/* ─────────────────────────── POST /api/booking ───────────────────────────
-   Повна заявка з модального вікна: імʼя, телефон, опис робіт.            */
-
-router.post(
-  '/booking',
-  rateLimit('booking', config.rateLimit.windowMs, config.rateLimit.maxBookings),
-  async (req, res) => {
-    const result = validateBooking(req.body);
-
-    if (!result.ok) {
-      // Ботам, що спалились на honeypot, відповідаємо як на успіх —
-      // інакше вони підбиратимуть обхід. Але нікуди не надсилаємо.
-      if (result.spam) {
-        console.warn('[booking] honeypot спрацював, ip=%s', req.ip);
-        return res.status(200).json({ ok: true, id: randomUUID() });
-      }
-      return res.status(400).json({ ok: false, error: 'validation', fields: result.errors });
-    }
-
-    const { name, phone, msg, page, referrer } = result.data;
-    const id = randomUUID();
-
-    const lines = [
-      '🔧 <b>Нова заявка з сайту</b>',
-      '',
-      `👤 <b>Імʼя:</b> ${escapeHtml(name)}`,
-      `📞 <b>Телефон:</b> ${escapeHtml(formatPhone(phone))}`,
-    ];
-    if (msg) lines.push('', `🚗 <b>Авто та роботи:</b>`, escapeHtml(msg));
-    lines.push('', `🕐 ${escapeHtml(when())}`);
-    if (page) lines.push(`🌐 ${escapeHtml(page)}`);
-
-    const text = lines.join('\n');
-
-    // Спершу на диск, потім у Telegram: якщо месенджер лежить, заявка не зникне.
-    const stored = await saveSubmission({
-      id,
-      type: 'booking',
-      at: new Date().toISOString(),
-      name,
-      phone,
-      msg,
-      page,
-      referrer,
-      ip: req.ip,
-      ua: req.get('user-agent') || '',
-    });
-
-    const delivery = await sendMessage(text);
-
-    if (!delivery.delivered && !delivery.dryRun) {
-      // Заявка збережена, але менеджер її не побачить у Telegram.
-      // Кажемо про це чесно й даємо запасний канал — телефон.
-      console.error('[booking] %s збережено=%s, telegram=НІ (%s)', id, stored, delivery.error);
-      return res.status(502).json({
-        ok: false,
-        error: 'delivery',
-        message:
-          'Заявку прийнято, але сповіщення не пройшло. Будь ласка, зателефонуйте нам: +380 (50) 560 03 58.',
-        id,
-      });
-    }
-
-    console.log('[booking] %s від %s (%s) → telegram=%s', id, name, phone, delivery.delivered ? 'так' : 'dry-run');
-    return res.status(200).json({ ok: true, id });
+import { acceptBooking, retryPending } from './bookings.js';
+import { site } from './site.js';
+import { esc } from './render.js';
+export const router=Router();
+const limiter=rateLimit('booking',config.rateLimit.windowMs,config.rateLimit.maxBookings);
+function respond(req,res,status,body){
+  if(req.path!=='/request')return res.status(status).json(body);
+  const title=body.ok?'Заявку отримано':'Перевірте заявку';
+  const message=body.message||Object.values(body.fields||{}).join(' ');
+  return res.status(status).type('html').send('<!doctype html><html lang="uk"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+title+' — Астор</title><link rel="stylesheet" href="/styles.css"><main class="container section"><h1>'+title+'</h1><p>'+esc(message)+'</p><p><a href="tel:'+site.phone+'">'+site.phoneLabel+'</a></p><a href="/#request">Повернутися до форми</a></main></html>');
+}
+async function submitBooking(req,res,next){
+  const result=validateBooking(req.body);
+  if(!result.ok){
+    if(result.spam)return respond(req,res,200,{ok:true,status:'received',message:'Дякуємо за звернення.'});
+    return respond(req,res,400,{ok:false,fields:result.errors});
   }
-);
-
-/* ───────────────────────────── POST /api/lead ─────────────────────────────
-   Легка подія: відвідувач натиснув кнопку дзвінка / посилання tel:.
-   Дає менеджеру знати про інтерес навіть без заповненої форми.           */
-
-router.post(
-  '/lead',
-  rateLimit('lead', config.rateLimit.windowMs, config.rateLimit.maxLeads),
-  async (req, res) => {
-    const result = validateLead(req.body);
-    if (!result.ok) {
-      return res.status(400).json({ ok: false, error: 'validation', fields: result.errors });
-    }
-
-    const { label, action, page, referrer } = result.data;
-    const id = randomUUID();
-
-    const text = [
-      '📞 <b>Клік по кнопці звʼязку</b>',
-      '',
-      `🔘 <b>Кнопка:</b> ${escapeHtml(label)}`,
-      `🕐 ${escapeHtml(when())}`,
-      page ? `🌐 ${escapeHtml(page)}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n');
-
-    await saveSubmission({
-      id,
-      type: 'lead',
-      at: new Date().toISOString(),
-      label,
-      action,
-      page,
-      referrer,
-      ip: req.ip,
-      ua: req.get('user-agent') || '',
-    });
-
-    // Клік — не критична подія: відповідаємо одразу, не змушуючи браузер чекати
-    // на Telegram. Сторінка вже переходить у режим дзвінка.
-    res.status(202).json({ ok: true, id });
-
-    sendMessage(text).catch((err) => console.error('[lead] %s', err.message));
+  const supplied=req.get('idempotency-key')||req.body?.idempotencyKey;
+  if(supplied&&!/^[a-zA-Z0-9_-]{16,128}$/.test(supplied))return respond(req,res,400,{ok:false,message:'Некоректний ідентифікатор запиту.'});
+  try{
+    const record=await acceptBooking(result.data,supplied||randomUUID());
+    const message=record.status==='pending'||record.status==='sending'
+      ? 'Заявку збережено. Сповіщення майстерні очікує доставки. Якщо звернення термінове, зателефонуйте: '+site.phoneLabel+'.'
+      : record.status==='dry_run' ? 'Тестову заявку збережено локально. Telegram у цьому середовищі не підключено.'
+      : 'Майстер зв’яжеться з вами в робочий час, щоб уточнити роботи та час візиту.';
+    return respond(req,res,200,{ok:true,id:record.id,status:record.status,message});
+  }catch(err){
+    return respond(req,res,err.status||503,{ok:false,message:err.status===409?err.message:'Не вдалося підтвердити збереження заявки. Спробуйте ще раз або зателефонуйте: '+site.phoneLabel+'.'});
   }
-);
-
-/* ────────────────── POST /api/telegram/webhook ──────────────────
-   Куди Telegram надсилає команди боту, коли працює webhook-режим
-   (на Vercel — єдиний можливий).                                   */
-
-router.post('/telegram/webhook', handleWebhook);
-
-/* ─────────────────────────── GET /api/health ─────────────────────────── */
-
-router.get('/health', async (req, res) => {
-  const storage = redisConfigured ? await redisPing() : null;
-
-  res.json({
-    ok: true,
-    env: config.nodeEnv,
-    serverless: config.isServerless,
-    telegram: telegramConfigured ? 'configured' : 'dry-run',
-    storage: redisConfigured ? (storage.ok ? 'redis' : `redis-error: ${storage.reason}`) : 'file',
-    botMode: config.isServerless ? 'webhook' : config.botPolling ? 'polling' : 'off',
-    uptime: Math.round(process.uptime()),
-  });
+}
+export const bookingHandler=[limiter,submitBooking];
+router.post('/booking',...bookingHandler);
+// Події взаємодії надходять у вебаналітику без персональних даних.
+// Старі кешовані сторінки можуть ще викликати /lead — приймаємо без повідомлень.
+router.post('/lead',rateLimit('lead',600000,30),(req,res)=>res.status(202).json({ok:true}));
+router.post('/telegram/webhook',handleWebhook);
+router.get('/health',async(req,res)=>{
+  const storage=redisConfigured?await redisPing():{ok:!config.isServerless};
+  const ok=storage.ok&&(telegramConfigured||config.allowDryRun);
+  res.status(ok?200:503).json({ok,storage:storage.ok?(redisConfigured?'redis':'file'):'unavailable',telegram:telegramConfigured?'configured':'dry-run'});
+});
+function validCron(req){
+  const actual=Buffer.from(req.get('authorization')||''),expected=Buffer.from('Bearer '+(process.env.CRON_SECRET||''));
+  return Boolean(process.env.CRON_SECRET)&&actual.length===expected.length&&timingSafeEqual(actual,expected);
+}
+router.get('/jobs/retry',async(req,res,next)=>{
+  if(!validCron(req))return res.status(401).json({ok:false});
+  try{res.json({ok:true,result:await retryPending()});}catch(err){next(err);}
 });

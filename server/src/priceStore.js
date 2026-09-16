@@ -1,142 +1,88 @@
-/**
- * Сховище прайсу.
- *
- * Джерело правди — Redis (ключ astor:prices). Якщо його немає або він мовчить,
- * віддаємо DEFAULT_PRICES: сторінка зі старим прайсом набагато краща за
- * порожні таблиці. Локально без Redis усе теж працює — просто редагування
- * не зберігається між перезапусками.
- */
+import { readFile, mkdir, writeFile, rename } from 'node:fs/promises';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { DEFAULT_PRICES } from './prices.js';
 import { redis, redisConfigured } from './redis.js';
-
-const KEY = 'astor:prices';
-const META_KEY = 'astor:prices:meta';
-
-/* Ліміти — щоб адмінка не могла покласти в Redis мегабайт сміття
-   і щоб таблиця лишалась читабельною. */
-const LIMITS = {
-  categories: 20,
-  rowsPerCategory: 200,
-  label: 60,
-  service: 400,
-  price: 60,
-  time: 60,
-  id: 32,
-};
-
-/** Локальний кеш на час життя процесу — щоб не бити в Redis на кожен рендер. */
-let memo = null;
-let memoAt = 0;
-const MEMO_MS = 5000;
-
-const str = (v, max) =>
-  typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '';
-
-/**
- * Приводить довільний вхід до коректної структури прайсу.
- * Кидає помилку з людським текстом, якщо дані непридатні.
- */
+import { config } from './config.js';
+const KEY = 'astor:price-state';
+let memo;
+let queue = Promise.resolve();
+const failure = (message, status = 400) => Object.assign(new Error(message), { status });
 export function validatePrices(input) {
-  if (!Array.isArray(input)) throw new Error('Очікується список категорій.');
-  if (input.length === 0) throw new Error('Потрібна щонайменше одна категорія.');
-  if (input.length > LIMITS.categories) {
-    throw new Error(`Забагато категорій (максимум ${LIMITS.categories}).`);
-  }
-
+  if (!Array.isArray(input) || !input.length || input.length > 20) throw failure('Потрібно від 1 до 20 категорій.');
   const seen = new Set();
-  const clean = [];
-
-  for (const [i, cat] of input.entries()) {
-    const id = str(cat?.id, LIMITS.id).toLowerCase().replace(/[^a-z0-9_-]/g, '');
-    if (!id) throw new Error(`Категорія №${i + 1}: порожній ідентифікатор.`);
-    if (seen.has(id)) throw new Error(`Категорія «${id}» повторюється.`);
+  const str = (value, max) => typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0,max) : '';
+  return input.map((cat, index) => {
+    const id = str(cat?.id,32).toLowerCase();
+    if (!/^[a-z0-9_-]+$/.test(id) || seen.has(id)) throw failure('Некоректний або повторний ідентифікатор категорії №' + (index + 1));
     seen.add(id);
-
-    const label = str(cat?.label, LIMITS.label);
-    if (!label) throw new Error(`Категорія «${id}»: не вказано назву.`);
-
-    if (!Array.isArray(cat?.rows)) throw new Error(`Категорія «${label}»: немає списку послуг.`);
-    if (cat.rows.length > LIMITS.rowsPerCategory) {
-      throw new Error(`Категорія «${label}»: забагато рядків (максимум ${LIMITS.rowsPerCategory}).`);
-    }
-
-    const rows = [];
-    for (const row of cat.rows) {
-      const service = str(row?.service, LIMITS.service);
-      // Рядок без назви послуги — сміття; мовчки відкидаємо, щоб порожні
-      // рядки з редактора не потрапляли на сайт.
-      if (!service) continue;
-      rows.push({
-        service,
-        price: str(row?.price, LIMITS.price),
-        time: str(row?.time, LIMITS.time),
-      });
-    }
-
-    clean.push({ id, label, rows });
-  }
-
-  return clean;
+    const label = str(cat.label,60);
+    if (!label || !Array.isArray(cat.rows) || cat.rows.length > 200) throw failure('Перевірте назву та рядки категорії №' + (index + 1));
+    const rows = cat.rows.map((row, i) => {
+      const service = str(row?.service,400), price = str(row?.price,60), time = str(row?.time,60);
+      if (!service || !price || !time) throw failure('«' + label + '», рядок ' + (i + 1) + ': заповніть назву, ціну та час.');
+      return { service, price, time };
+    });
+    return { id, label, rows };
+  });
 }
-
-/** Актуальний прайс: Redis → памʼять процесу → дефолти. */
-export async function getPrices({ fresh = false } = {}) {
-  if (!fresh && memo && Date.now() - memoAt < MEMO_MS) return memo;
-
-  if (redisConfigured) {
-    try {
-      const raw = await redis(['GET', KEY]);
-      if (raw) {
-        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        memo = validatePrices(parsed);
-        memoAt = Date.now();
-        return memo;
-      }
-    } catch (err) {
-      console.error('[prices] Redis недоступний, віддаю дефолтні ціни:', err.message);
-    }
-  }
-
-  memo = DEFAULT_PRICES;
-  memoAt = Date.now();
-  return memo;
-}
-
-/** Зберігає прайс. Повертає збережену (очищену) структуру. */
-export async function savePrices(input, author = 'admin') {
-  const clean = validatePrices(input);
-
-  if (!redisConfigured) {
-    // Локально без Redis: тримаємо в памʼяті, щоб редактор можна було
-    // спробувати. Після перезапуску повернуться дефолти — і це чесніше,
-    // ніж вдавати, що збереглось назавжди.
-    memo = clean;
-    memoAt = Date.now();
-    return { prices: clean, persisted: false };
-  }
-
-  await redis([
-    ['SET', KEY, JSON.stringify(clean)],
-    ['SET', META_KEY, JSON.stringify({ at: new Date().toISOString(), author })],
-  ]);
-
-  memo = clean;
-  memoAt = Date.now();
-  return { prices: clean, persisted: true };
-}
-
-/** Коли й ким востаннє змінювали — показуємо в адмінці. */
-export async function pricesMeta() {
-  if (!redisConfigured) return null;
+const defaults = () => ({ prices: structuredClone(DEFAULT_PRICES), revision: 'initial', meta: null, history: [] });
+export async function getPriceState({ strict = false } = {}) {
   try {
-    const raw = await redis(['GET', META_KEY]);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
+    let raw;
+    if (redisConfigured) {
+      raw = await redis(['GET', KEY]);
+      if (!raw) {
+        const legacy = await redis(['GET', 'astor:prices']);
+        const state = defaults();
+        if (legacy) state.prices = validatePrices(typeof legacy === 'string' ? JSON.parse(legacy) : legacy);
+        memo = state;
+        return state;
+      }
+    } else {
+      try { raw = await readFile(config.pricePath, 'utf8'); }
+      catch (err) { if (err.code !== 'ENOENT') throw err; }
+    }
+    const state = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : defaults();
+    state.prices = validatePrices(state.prices);
+    memo = state;
+    return structuredClone(state);
+  } catch (err) {
+    if (!strict && memo) return structuredClone(memo);
+    throw failure('Сховище цін недоступне. Спробуйте пізніше.', 503);
   }
 }
-
-/** Скидання до початкового прайсу — кнопка в адмінці. */
-export async function resetPrices() {
-  return savePrices(DEFAULT_PRICES, 'reset');
+export async function getPrices() { return (await getPriceState()).prices; }
+export async function pricesMeta() { return (await getPriceState()).meta; }
+async function persist(input, author, expectedRevision) {
+  const prices = validatePrices(input);
+  const current = await getPriceState({ strict: true });
+  if (expectedRevision !== undefined && expectedRevision !== current.revision) throw failure('Прайс уже змінено в іншому вікні. Оновіть сторінку перед збереженням.',409);
+  const state = {
+    prices, revision: randomUUID(), meta: { at: new Date().toISOString(), author },
+    history: [{ prices: current.prices, revision: current.revision, meta: current.meta }, ...(current.history || [])].slice(0,20),
+  };
+  if (redisConfigured) {
+    const script = "local old=redis.call('GET',KEYS[1]); if old and cjson.decode(old).revision ~= ARGV[1] then return 0 end; redis.call('SET',KEYS[1],ARGV[2]); return 1";
+    if (Number(await redis(['EVAL',script,'1',KEY,current.revision,JSON.stringify(state)])) !== 1) throw failure('Прайс змінився під час збереження. Оновіть сторінку.',409);
+  } else {
+    await mkdir(path.dirname(config.pricePath),{recursive:true});
+    const temporary = config.pricePath + '.' + randomUUID() + '.tmp';
+    await writeFile(temporary,JSON.stringify(state),'utf8');
+    await rename(temporary,config.pricePath);
+  }
+  memo = state;
+  return { prices, revision: state.revision, meta: state.meta, persisted: true };
+}
+export function savePrices(input, author = 'admin', expectedRevision) {
+  const result = queue.then(() => persist(input,author,expectedRevision));
+  queue = result.catch(() => {});
+  return result;
+}
+export const resetPrices = expected => savePrices(DEFAULT_PRICES,'reset',expected);
+export async function restorePrices(revision, expected) {
+  const state = await getPriceState({strict:true});
+  const old = state.history.find(item => item.revision === revision);
+  if (!old) throw failure('Версію не знайдено.',404);
+  return savePrices(old.prices,'restore',expected);
 }

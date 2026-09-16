@@ -1,76 +1,32 @@
 import { Router } from 'express';
-import { config } from './config.js';
-import { adminConfigured, createSession, requireAdmin, verifyPassword } from './auth.js';
-import { getPrices, pricesMeta, resetPrices, savePrices } from './priceStore.js';
+import { adminConfigured, createSession, requireAdmin, verifyPassword, setSessionCookie, protectAdminRequest } from './auth.js';
+import { getPriceState, resetPrices, restorePrices, savePrices } from './priceStore.js';
 import { rateLimit } from './rateLimit.js';
-import { redisConfigured } from './redis.js';
-
+import { retryPending, listBookings } from './bookings.js';
 export const adminRouter = Router();
-
-/* ── вхід ──────────────────────────────────────────────────────────────
-   Ліміт жорсткіший за решту: 10 спроб на 10 хвилин з одного IP. Це головна
-   перепона для перебору пароля, бо інших захистів у однокористувацької
-   схеми немає.                                                          */
-
-adminRouter.post('/login', rateLimit('admin-login', 10 * 60 * 1000, 10), (req, res) => {
-  if (!adminConfigured) {
-    return res.status(503).json({
-      ok: false,
-      error: 'admin_disabled',
-      message: 'Адмінка не налаштована: не задано ADMIN_PASSWORD_HASH.',
-    });
-  }
-
-  const password = typeof req.body?.password === 'string' ? req.body.password : '';
-
-  if (!verifyPassword(password)) {
-    // Навмисно не уточнюємо, що саме не так.
-    return res.status(401).json({ ok: false, error: 'bad_password', message: 'Невірний пароль.' });
-  }
-
-  res.json({ ok: true, token: createSession() });
+adminRouter.use(protectAdminRequest);
+adminRouter.post('/login',rateLimit('admin-login',600000,10,{strict:true}),(req,res) => {
+  if (!adminConfigured) return res.status(503).json({ok:false,message:'Адмінка не налаштована.'});
+  if (!verifyPassword(req.body?.password)) return res.status(401).json({ok:false,message:'Невірний пароль.'});
+  setSessionCookie(res,createSession()); res.json({ok:true});
 });
-
-/* ── стан сесії ──────────────────────────────────────────────────── */
-
-adminRouter.get('/session', requireAdmin, (req, res) => {
-  res.json({ ok: true, storage: redisConfigured ? 'redis' : 'memory' });
-});
-
-/* ── читання прайсу для редактора ────────────────────────────────── */
-
-adminRouter.get('/prices', requireAdmin, async (req, res) => {
-  const [prices, meta] = await Promise.all([getPrices({ fresh: true }), pricesMeta()]);
-  res.json({
-    ok: true,
-    prices,
-    meta,
-    // Без Redis правки живуть лише до перезапуску процесу — редактор про це попереджає.
-    persistent: redisConfigured,
-  });
-});
-
-/* ── збереження ──────────────────────────────────────────────────── */
-
-adminRouter.put('/prices', requireAdmin, async (req, res) => {
+adminRouter.post('/logout',(req,res) => { setSessionCookie(res,'');res.json({ok:true}); });
+adminRouter.use(requireAdmin);
+adminRouter.get('/session',(req,res) => res.json({ok:true}));
+adminRouter.get('/prices',async(req,res,next) => {
   try {
-    const { prices, persisted } = await savePrices(req.body?.prices);
-    res.json({
-      ok: true,
-      prices,
-      persisted,
-      // Скільки чекати появи змін на сайті — щоб адміністратор не думав,
-      // що нічого не спрацювало (сторінка кешується на CDN).
-      visibleInSec: config.isServerless ? 60 : 0,
-    });
-  } catch (err) {
-    res.status(400).json({ ok: false, error: 'validation', message: err.message });
-  }
+    const state = await getPriceState({strict:true});
+    res.json({ok:true,...state,history:state.history.map(({revision,meta})=>({revision,meta})),persistent:true});
+  } catch(err) {next(err);}
 });
-
-/* ── скидання до початкового прайсу ──────────────────────────────── */
-
-adminRouter.post('/prices/reset', requireAdmin, async (req, res) => {
-  const { prices, persisted } = await resetPrices();
-  res.json({ ok: true, prices, persisted });
-});
+const save = fn => async(req,res,next) => {
+  try {
+    if (typeof req.body?.revision !== 'string') return res.status(400).json({ok:false,message:'Оновіть прайс перед збереженням.'});
+    res.json({ok:true,...await fn(req.body),visibleInSec:0});
+  } catch(err) {res.status(err.status || 503).json({ok:false,message:err.message});}
+};
+adminRouter.put('/prices',save(body=>savePrices(body.prices,'admin',body.revision)));
+adminRouter.post('/prices/reset',save(body=>resetPrices(body.revision)));
+adminRouter.post('/prices/restore',save(body=>restorePrices(body.restoreRevision,body.revision)));
+adminRouter.get('/bookings',async(req,res,next)=>{try{res.json({ok:true,bookings:await listBookings()});}catch(err){next(err);}});
+adminRouter.post('/bookings/retry',async(req,res,next)=>{try{res.json({ok:true,result:await retryPending()});}catch(err){next(err);}});

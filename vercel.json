@@ -1,23 +1,22 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "cleanUrls": true,
-  "functions": {
-    "api/index.js": {
-      "includeFiles": "server/templates/**"
-    }
-  },
+  "framework": null,
+  "buildCommand": "",
+  "outputDirectory": "public",
+  "crons": [{ "path": "/api/jobs/retry", "schedule": "0 7 * * *" }],
+  "functions": { "api/index.js": { "includeFiles": "server/templates/**" } },
   "rewrites": [
     { "source": "/", "destination": "/api/index" },
+    { "source": "/index.html", "destination": "/api/index" },
+    { "source": "/admin", "destination": "/api/index" },
+    { "source": "/admin.html", "destination": "/api/index" },
+    { "source": "/request", "destination": "/api/index" },
     { "source": "/api/:path*", "destination": "/api/index" }
   ],
   "headers": [
-    {
-      "source": "/assets/(.*)",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=604800, immutable" }]
-    },
-    {
-      "source": "/admin",
-      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
-    }
+    { "source": "/(.*)", "headers": [
+      { "key": "X-Content-Type-Options", "value": "nosniff" },
+      { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+    ]}
   ]
 }

@@ -1,0 +1,14 @@
+<!doctype html><html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Астор — керування</title><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/admin.css"><script type="module" src="/admin.js"></script></head><body>
+<header class="container admin-header"><a class="brand" href="/">АСТОР</a><h1>Керування майстернею</h1><button class="btn btn-secondary" id="logout" hidden>Вийти</button></header>
+<main class="container">
+<section id="login" class="login-panel"><h2>Вхід адміністратора</h2><form id="login-form"><div class="field"><label for="pw">Пароль</label><input id="pw" type="password" autocomplete="current-password" required maxlength="1024"></div><button class="btn btn-primary">Увійти</button><p id="login-message" role="alert"></p></form></section>
+<section id="editor" hidden><p id="meta" class="muted"></p><p id="message" role="status" tabindex="-1"></p>
+<fieldset id="controls"><legend class="sr-only">Редагування прайсу</legend>
+<div class="admin-toolbar"><button class="btn btn-primary" id="save">Зберегти прайс</button><button class="btn btn-secondary" id="revert">Скасувати зміни</button><a href="/" target="_blank" rel="noopener">Переглянути сайт ↗</a></div>
+<div class="category-controls"><label for="category">Категорія</label><select id="category"></select><button class="btn btn-secondary" id="add-category">Додати категорію</button></div>
+<div class="category-controls"><label for="category-name">Назва</label><input id="category-name" maxlength="60"><button class="btn btn-secondary" id="category-up" aria-label="Перемістити категорію вище">↑</button><button class="btn btn-secondary" id="category-down" aria-label="Перемістити категорію нижче">↓</button><button class="btn btn-secondary" id="delete-category">Видалити категорію</button></div>
+<div id="rows"></div><button class="btn btn-secondary" id="add-row">Додати роботу</button>
+<details class="admin-history"><summary>Історія та відновлення прайсу</summary><label for="history">Попередня версія</label><select id="history"></select><button class="btn btn-secondary" id="restore">Відновити версію</button><button class="btn btn-secondary" id="reset">Початковий прайс</button><p class="muted">Зберігаються останні 20 версій. Відновлення створює нову версію.</p></details>
+</fieldset>
+<section class="bookings"><h2>Заявки</h2><p class="muted">Заявки зберігаються окремо від статистики. Час візиту узгоджується з клієнтом телефоном.</p><div class="admin-toolbar"><button class="btn btn-secondary" id="refresh-bookings">Оновити список</button><button class="btn btn-secondary" id="retry-bookings">Повторити доставку сповіщень</button></div><div id="bookings-list" aria-live="polite"></div></section>
+</section></main></body></html>

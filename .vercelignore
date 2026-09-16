@@ -1,0 +1,11 @@
+/data
+/.env
+/.env.*
+/tests
+/AUDIT-2026-09-16.md
+/IMPLEMENTATION-2026-09-16.md
+/assets
+/_ds
+/admin.html
+/ds-base.js
+/image-slot.js

@@ -16,6 +16,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  */
 export async function sendMessage(text, { attempts = 3 } = {}) {
   if (!telegramConfigured) {
+    if (!config.allowDryRun) return { delivered: false, error: 'Telegram не налаштовано' };
     console.log('\n──────── TELEGRAM DRY RUN ────────\n' + text + '\n──────────────────────────────────\n');
     return { delivered: false, dryRun: true };
   }
@@ -50,7 +51,7 @@ export async function sendMessage(text, { attempts = 3 } = {}) {
 
       // 429 — Telegram сам каже, скільки чекати. 5xx — тимчасовий збій, пробуємо ще.
       if (res.status === 429) {
-        const wait = (body.parameters?.retry_after ?? 1) * 1000;
+        const wait = Math.min(body.parameters?.retry_after ?? 1, 5) * 1000;
         if (attempt < attempts) {
           await sleep(wait);
           continue;

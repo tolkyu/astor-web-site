@@ -67,8 +67,7 @@ function handleCommand(command, msg) {
           '',
           isTarget
             ? '✅ Цей чат налаштовано як отримувач — заявки приходитимуть сюди.'
-            : `⚠️ Заявки налаштовані на інший чат (<code>${escapeHtml(config.telegram.chatId)}</code>).\n` +
-              `Щоб отримувати їх тут, впишіть у .env:\n<code>TELEGRAM_CHAT_ID=${chatId}</code>`,
+            : 'Цей чат не налаштовано для отримання заявок. Зверніться до адміністратора майстерні.',
           '',
           '/help — список команд',
         ].join('\n')
@@ -183,19 +182,19 @@ export function stopBot() {
  */
 export async function handleWebhook(req, res) {
   const secret = config.telegram.webhookSecret;
+  if (!secret) return res.status(503).json({ ok: false });
 
   if (secret && req.get('x-telegram-bot-api-secret-token') !== secret) {
     console.warn('[bot] webhook: невірний секрет, ip=%s', req.ip);
     return res.status(401).json({ ok: false });
   }
 
-  // Відповідаємо одразу: Telegram повторює доставку, якщо чекати надто довго,
-  // і тоді на одну команду прилетить кілька відповідей.
-  res.status(200).json({ ok: true });
-
+  // Завершуємо роботу до відповіді, щоб serverless не зупинив її посеред запиту.
   try {
     await processUpdate(req.body || {});
+    res.status(200).json({ ok: true });
   } catch (err) {
     console.error('[bot] webhook: помилка обробки:', err.message);
+    res.status(500).json({ ok: false });
   }
 }

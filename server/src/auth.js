@@ -8,11 +8,12 @@
  * у змінних оточення теж приймається (ADMIN_PASSWORD), але це гірше: його
  * видно кожному, хто має доступ до панелі Vercel.
  *
- * Сесія — підписаний HMAC токен у localStorage браузера. Не JWT: тут не
+ * Сесія — підписаний HMAC токен в HttpOnly cookie. Не JWT: тут не
  * потрібна ні сумісність, ні бібліотека, а формат «payload.signature»
  * робить те саме на 30 рядках.
  */
 import crypto from 'node:crypto';
+import { config } from './config.js';
 
 const SESSION_HOURS = 12;
 
@@ -45,6 +46,7 @@ export function hashPassword(password, salt = crypto.randomBytes(16)) {
 }
 
 export function verifyPassword(password) {
+  if (typeof password !== 'string' || password.length > 1024) return false;
   if (hashEnv) {
     const [scheme, saltHex, keyHex] = hashEnv.split('$');
     if (scheme !== 'scrypt' || !saltHex || !keyHex) {
@@ -77,7 +79,9 @@ export function createSession() {
 
 export function verifySession(token) {
   if (!token || !secret) return false;
-  const [payload, signature] = String(token).split('.');
+  const parts = String(token).split('.');
+  if (parts.length !== 2) return false;
+  const [payload, signature] = parts;
   if (!payload || !signature) return false;
   if (!safeEqual(signature, sign(payload))) return false;
 
@@ -99,11 +103,26 @@ export function requireAdmin(req, res, next) {
     });
   }
 
-  const header = req.get('authorization') || '';
-  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+  const token = (req.get('cookie') || '').split(';').map(v => v.trim()).find(v => v.startsWith('astor_session='))?.slice(14) || '';
 
   if (!verifySession(token)) {
     return res.status(401).json({ ok: false, error: 'unauthorized' });
+  }
+  next();
+}
+
+export function setSessionCookie(res, token) {
+  res.cookie('astor_session', token, { httpOnly: true, secure: config.isProd, sameSite: 'strict', path: '/api/admin', maxAge: token ? SESSION_HOURS * 3600_000 : 0 });
+}
+
+// Custom header rejects HTML form CSRF; no CORS permissions are granted to admin routes.
+export function protectAdminRequest(req, res, next) {
+  if (['GET','HEAD','OPTIONS'].includes(req.method)) return next();
+  if (req.get('x-astor-admin') !== '1' || req.get('sec-fetch-site') === 'cross-site') return res.status(403).json({ ok: false, message: 'Недозволене джерело запиту.' });
+  const origin = req.get('origin');
+  if (origin) {
+    try { if (new URL(origin).host !== req.get('host')) return res.status(403).json({ ok: false }); }
+    catch { return res.status(403).json({ ok: false }); }
   }
   next();
 }
