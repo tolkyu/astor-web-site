@@ -16,6 +16,7 @@ import { lookupCustomer, saveCustomer } from './handlers/customer.js';
 import { estimatePrice } from './handlers/price.js';
 import { createRequest } from './handlers/request.js';
 import { handoffToAdmin } from './handlers/handoff.js';
+import { closeConversation } from './handlers/close.js';
 
 /**
  * strict вимагає, щоб у `required` стояли ВСІ ключі. Необов'язкові поля
@@ -141,6 +142,21 @@ export const toolDefinitions = [
       additionalProperties: false,
     },
   },
+  {
+    name: 'close_conversation',
+    description:
+      'Закриває діалог, коли розмова справді скінчилась: клієнт прощається («дякую, все», ' +
+      '«до зустрічі», «бувайте»), або заявку вже передано майстерні й питань більше немає. ' +
+      'Після закриття клієнт побачить прохання оцінити спілкування, тож не викликай, поки ' +
+      'клієнт чогось чекає від тебе. Якщо він напише знову — почнеться новий діалог.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {},
+      required: [],
+      additionalProperties: false,
+    },
+  },
 ];
 
 const handlers = {
@@ -149,6 +165,7 @@ const handlers = {
   estimate_price: estimatePrice,
   create_request: createRequest,
   handoff_to_admin: handoffToAdmin,
+  close_conversation: closeConversation,
 };
 
 /**

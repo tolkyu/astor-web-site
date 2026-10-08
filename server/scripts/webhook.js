@@ -68,7 +68,8 @@ async function main() {
 
   const payload = {
     url,
-    allowed_updates: ['message'],
+    // callback_query — натискання зірочок в оцінці діалогу.
+    allowed_updates: ['message', 'callback_query'],
     drop_pending_updates: false,
   };
   if (secret) payload.secret_token = secret;

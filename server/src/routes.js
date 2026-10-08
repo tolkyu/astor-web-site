@@ -9,6 +9,7 @@ import { acceptBooking, retryPending } from './bookings.js';
 import { site } from './site.js';
 import { esc } from './render.js';
 import { sendDailyReport } from './agent/dailyReport.js';
+import { sendServiceReminders } from './agent/serviceReminders.js';
 export const router=Router();
 const limiter=rateLimit('booking',config.rateLimit.windowMs,config.rateLimit.maxBookings);
 function respond(req,res,status,body){
@@ -63,4 +64,10 @@ router.get('/jobs/retry',async(req,res,next)=>{
 router.get('/jobs/daily-report',async(req,res,next)=>{
   if(!validCron(req))return res.status(401).json({ok:false});
   try{res.json({ok:true,result:await sendDailyReport()});}catch(err){next(err);}
+});
+// Нагадування про планове ТО. 07:00 UTC — це 10:00 за Києвом улітку і
+// 09:00 узимку; година різниці для нагадування про ТО не важить.
+router.get('/jobs/service-reminders',async(req,res,next)=>{
+  if(!validCron(req))return res.status(401).json({ok:false});
+  try{res.json({ok:true,result:await sendServiceReminders()});}catch(err){next(err);}
 });

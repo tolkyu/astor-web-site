@@ -177,6 +177,136 @@
     addPhoneNote(message);
   }
 
+  /* ── оцінка діалогу ───────────────────────────────────────────────── */
+
+  /**
+   * Зірочки прямо в чаті. Поле вводу лишаємо відкритим: діалог закритий,
+   * але клієнт має право написати ще — тоді почнеться новий, а оцінка
+   * лишиться при закритому.
+   */
+  function addRating(conversationId) {
+    var wrap = node('div', 'astor-rate');
+    wrap.appendChild(node('div', 'astor-rate-label', 'Оцініть, будь ласка, спілкування'));
+
+    var row = node('div', 'astor-rate-stars');
+    var buttons = [];
+
+    function pick(score) {
+      // Кнопки знімаємо одразу: повторне натискання все одно нічого не
+      // змінить (сервер лишає першу оцінку), але клієнт цього не знає.
+      for (var i = 0; i < buttons.length; i++) buttons[i].disabled = true;
+
+      post('/rate', { token: state.token, conversation_id: conversationId, score: score })
+        .then(function (res) {
+          if (!res.data.ok) {
+            wrap.appendChild(node('div', 'astor-rate-label', 'Не вдалося зберегти оцінку.'));
+            return;
+          }
+          askComment(wrap, conversationId);
+          // Сервер сам вирішує, чи просити відгук (оцінка 4–5 і не частіше
+          // ніж раз на 90 днів). Віджет лише показує те, що йому дали.
+          if (res.data.review_url) addReviewInvite(res.data.review_invite, res.data.review_url);
+        })
+        .catch(function () {
+          wrap.appendChild(node('div', 'astor-rate-label', 'Не вдалося зберегти оцінку.'));
+        });
+    }
+
+    for (var score = 1; score <= 5; score++) {
+      (function (value) {
+        var star = node('button', 'astor-rate-star', '★');
+        star.type = 'button';
+        star.setAttribute('aria-label', value + ' з 5');
+        // Підсвічуємо все до наведеної зірочки — як у будь-якій оцінці.
+        star.addEventListener('mouseenter', function () { highlight(buttons, value); });
+        star.addEventListener('focus', function () { highlight(buttons, value); });
+        star.addEventListener('click', function () { highlight(buttons, value); pick(value); });
+        buttons.push(star);
+        row.appendChild(star);
+      })(score);
+    }
+
+    row.addEventListener('mouseleave', function () { highlight(buttons, 0); });
+
+    wrap.appendChild(row);
+    el.log.appendChild(wrap);
+    el.log.scrollTop = el.log.scrollHeight;
+  }
+
+  /**
+   * Прохання залишити відгук у Google. Єдине місце в чаті, крім телефону,
+   * де з'являється посилання, — і воно веде на адресу від сервера, а не
+   * зашиту тут: профіль майстерні може змінитись без перескладання віджета.
+   */
+  function addReviewInvite(invite, url) {
+    var box = node('div', 'astor-rate');
+    box.appendChild(node('div', 'astor-rate-label', invite));
+
+    var link = node('a', 'astor-rate-review', '⭐ Залишити відгук');
+    link.href = url;
+    link.target = '_blank';
+    // noopener: сторінка, що відкрилась, не має доступу до нашого вікна.
+    link.rel = 'noopener noreferrer';
+
+    box.appendChild(link);
+    el.log.appendChild(box);
+    el.log.scrollTop = el.log.scrollHeight;
+  }
+
+  function highlight(buttons, upTo) {
+    for (var i = 0; i < buttons.length; i++) {
+      buttons[i].classList.toggle('astor-rate-star-on', i < upTo);
+    }
+  }
+
+  /** «Дякуємо! Хочете додати коментар?» — поле і кнопка «Пропустити». */
+  function askComment(wrap, conversationId) {
+    var ask = node('div', 'astor-rate-comment');
+    ask.appendChild(node('div', 'astor-rate-label', 'Дякуємо! Хочете додати коментар?'));
+
+    var field = node('textarea', 'astor-chat-input');
+    field.rows = 2;
+    field.setAttribute('aria-label', 'Коментар');
+
+    var row = node('div', 'astor-rate-actions');
+    var save = node('button', 'astor-chat-send', 'Надіслати');
+    save.type = 'button';
+    var skip = node('button', 'astor-rate-skip', 'Пропустити');
+    skip.type = 'button';
+
+    function done(text) {
+      ask.remove();
+      wrap.appendChild(node('div', 'astor-rate-label', text));
+      el.log.scrollTop = el.log.scrollHeight;
+    }
+
+    save.addEventListener('click', function () {
+      var text = field.value.trim();
+      if (!text) return;
+      save.disabled = true;
+      skip.disabled = true;
+      post('/rate', { token: state.token, conversation_id: conversationId, comment: text })
+        .then(function () { done('Дякую, передав майстерні.'); })
+        .catch(function () { done('Коментар не дійшов, але оцінку збережено.'); });
+    });
+
+    skip.addEventListener('click', function () {
+      save.disabled = true;
+      skip.disabled = true;
+      post('/rate', { token: state.token, conversation_id: conversationId, skip: true })
+        .catch(function () { /* не критично: прапорець і так спливе за годину */ });
+      done('Дякуємо за оцінку!');
+    });
+
+    row.appendChild(save);
+    row.appendChild(skip);
+    ask.appendChild(field);
+    ask.appendChild(row);
+    wrap.appendChild(ask);
+    el.log.scrollTop = el.log.scrollHeight;
+    field.focus();
+  }
+
   /* ── мережа ───────────────────────────────────────────────────────── */
 
   function post(path, body) {
@@ -254,6 +384,9 @@
 
         if (res.data.reply) addMessage(res.data.reply, 'bot');
         if (res.data.handed_off) closeInput('Далі з вами зв\'яжеться адміністратор. Телефон:');
+        // Агент закрив діалог — просимо оцінку. Поле вводу лишається:
+        // клієнт може почати нову розмову, не чекаючи нічиєї згоди.
+        else if (res.data.closed && res.data.conversation_id) addRating(res.data.conversation_id);
       })
       .catch(function () {
         typing.remove();

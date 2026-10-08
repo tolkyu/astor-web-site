@@ -92,6 +92,56 @@ export function notifyHandoff({ reason, summary, channel, externalId, customer }
 }
 
 /**
+ * Низька оцінка (1–2). Єдине повідомлення агента, яке не чекає ранку:
+ * клієнт, незадоволений щойно, і клієнт, незадоволений із вчора, — це дві
+ * різні розмови, і друга вже майже напевно не відбудеться.
+ *
+ * «Посилання на діалог» у Telegram — це команда /reply: прямого URL на
+ * чат з ботом не існує, а ось відповісти клієнту адміністратор може одним
+ * рядком, не виходячи з цього ж чату. У чаті на сайті відповісти нема як,
+ * тому там лишається телефон.
+ */
+export function notifyLowRating({ rating, closure, customer, comment }) {
+  const lines = [
+    `⭐ <b>Низька оцінка: ${rating.score}/5</b>`,
+    '',
+    `<b>Клієнт:</b> ${escapeHtml(customer?.name || 'не назвався')}`,
+    `<b>Телефон:</b> ${escapeHtml(customer?.phone ? formatPhone(customer.phone) : '—')}`,
+    `<b>Канал:</b> ${channelLabel(closure?.channel)}`,
+    '',
+    comment
+      ? `<b>Коментар:</b> ${escapeHtml(comment)}`
+      : '<i>Коментаря ще немає — якщо клієнт його напише, надішлю окремо.</i>',
+  ];
+
+  lines.push(
+    '',
+    closure?.channel === 'telegram'
+      ? `Відповісти клієнту: <code>/reply ${escapeHtml(closure.externalId)} текст</code>`
+      : customer?.phone
+        ? 'Клієнт у чаті на сайті — зателефонуйте йому на номер вище.'
+        : 'Клієнт у чаті на сайті й номера не залишив — зв\'язатись з ним нема як.'
+  );
+
+  return sendMessage(lines.join('\n'));
+}
+
+/** Коментар, що дійшов уже після повідомлення про низьку оцінку. */
+export function notifyRatingComment({ rating, closure, comment }) {
+  return sendMessage(
+    [
+      `💬 <b>Коментар до оцінки ${rating.score}/5</b>`,
+      '',
+      escapeHtml(comment),
+      '',
+      closure?.channel === 'telegram'
+        ? `Відповісти: <code>/reply ${escapeHtml(closure.externalId)} текст</code>`
+        : `<i>Джерело: ${channelLabel(closure?.channel)}.</i>`,
+    ].join('\n')
+  );
+}
+
+/**
  * Збій інтеграції. Про такі речі адміністратор має дізнаватись від нас,
  * а не з того, що клієнти перестали писати.
  *

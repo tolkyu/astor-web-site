@@ -4,7 +4,7 @@
   "buildCommand": "",
   "outputDirectory": "public",
   "crons": [
-    { "path": "/api/jobs/retry", "schedule": "0 7 * * *" },
+    { "path": "/api/jobs/service-reminders", "schedule": "0 7 * * *" },
     { "path": "/api/jobs/daily-report", "schedule": "0 17 * * *" }
   ],
   "functions": {

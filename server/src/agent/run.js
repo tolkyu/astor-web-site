@@ -7,7 +7,7 @@
  */
 import Anthropic from '@anthropic-ai/sdk';
 import { config, agentConfigured } from '../config.js';
-import { bumpStat, saveConversation } from '../agentStore.js';
+import { bumpStat, closeConversation, saveConversation } from '../agentStore.js';
 import { notifyFailure } from '../notifyAdmin.js';
 import { site } from '../site.js';
 import { buildSystem } from './systemPrompt.js';
@@ -103,7 +103,7 @@ export async function runAgent(conversation, userMessage, options = {}) {
     lang: conversation.lang ?? null,
   };
 
-  const system = await buildSystem();
+  const system = await buildSystem(new Date(), conversation.context);
   let messages = trimHistory(conversation.messages);
   let answer = '';
 
@@ -180,7 +180,16 @@ export async function runAgent(conversation, userMessage, options = {}) {
   }
 
   conversation.messages = trimHistory(conversation.messages);
-  await saveConversation(conversation);
+
+  // close_conversation лише виставив статус. Запис про закриття робимо
+  // тут, бо саме тут історія вже дописана, а customerId — остаточний:
+  // модель часто викликає save_customer і close_conversation одним ходом.
+  if (conversation.status === 'closed') {
+    await closeConversation(conversation);
+    await bumpStat('closed');
+  } else {
+    await saveConversation(conversation);
+  }
 
   if (conversation.tokens > config.agent.tokenAlertThreshold) {
     console.warn('[agent] діалог %s спалив %d токенів', conversation.id, conversation.tokens);
@@ -190,6 +199,10 @@ export async function runAgent(conversation, userMessage, options = {}) {
     text: answer,
     status: conversation.status,
     handedOff: conversation.status === 'handoff',
+    // Канал має показати зірочки рівно один раз — на тому ході, що закрив
+    // діалог. Самого статусу для цього мало: він лишається 'closed' і далі.
+    closed: conversation.status === 'closed',
+    conversationId: conversation.id,
   };
 }
 

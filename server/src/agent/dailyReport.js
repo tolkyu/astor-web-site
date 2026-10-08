@@ -29,7 +29,20 @@ export async function sendDailyReport(now = new Date()) {
     `Повідомлень: ${stats.messages}`,
     `Заявок: ${stats.requests}`,
     `Передано людині: ${stats.handoffs}`,
+    `Закрито агентом: ${stats.closed}`,
   ];
+
+  // Середнє рахуємо тут: у Redis лежать кількість і сума балів, бо
+  // середнє не додається інкрементом (див. agentStore, STAT_NAMES).
+  if (stats.ratings) {
+    const average = (stats.ratingSum / stats.ratings).toFixed(1);
+    lines.push(
+      '',
+      `Оцінок: ${stats.ratings}, середня ${average}`,
+      ...(stats.ratingsLow ? [`⚠️ Низьких (1–2): ${stats.ratingsLow}`] : []),
+      `Запрошень на відгук: ${stats.reviewLinks}`
+    );
+  }
 
   if (paused) lines.push('', '⏸ <i>Агент на паузі — автовідповіді вимкнені.</i>');
 

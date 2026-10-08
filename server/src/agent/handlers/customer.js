@@ -9,6 +9,7 @@
  */
 import { normalizePhone } from '../../validate.js';
 import { findCustomer, upsertCustomer } from '../../agentStore.js';
+import { mileageOverdue, vehicleLabel } from '../service.js';
 
 /** Клієнта віддаємо моделі без id: він їй не потрібен, а в промпті зайвий. */
 const forModel = (customer) => ({
@@ -19,8 +20,35 @@ const forModel = (customer) => ({
     model: v.model ?? null,
     year: v.year ?? null,
     mileage_km: v.mileageKm ?? null,
+    // Строк ТО показуємо моделі: інакше вона не може ні згадати про нього
+    // сама, ні відповісти, коли клієнт спитає «а коли мені на ТО?».
+    next_service_due_at: v.nextServiceDueAt ?? null,
+    next_service_due_km: v.nextServiceDueKm ?? null,
   })),
 });
+
+/**
+ * Авто, яким за пробігом уже час на ТО.
+ *
+ * Це те, що перетворює сказане в розмові («у мене вже 72 тисячі») на
+ * пропозицію записатись: телеметрії ми не маємо, і пробіг дізнаємось
+ * рівно тоді, коли клієнт його назве.
+ */
+function serviceHint(customer) {
+  const overdue = customer.vehicles.filter(mileageOverdue);
+  if (!overdue.length) return {};
+
+  return {
+    service_due: overdue.map((vehicle) => ({
+      vehicle: vehicleLabel(vehicle),
+      mileage_km: vehicle.mileageKm,
+      due_km: vehicle.nextServiceDueKm,
+    })),
+    service_due_hint:
+      'За пробігом цьому авто вже час на планове ТО. Скажи про це клієнту одним реченням ' +
+      'і запропонуй записатись. Наполягати не треба: відмовився — продовжуй про те, з чим він прийшов.',
+  };
+}
 
 export async function lookupCustomer(input, ctx) {
   const phone = input.phone ? normalizePhone(input.phone) : null;
@@ -34,7 +62,7 @@ export async function lookupCustomer(input, ctx) {
   if (!customer) return { found: false };
 
   ctx.conversation.customerId = customer.id;
-  return { found: true, customer: forModel(customer) };
+  return { found: true, customer: forModel(customer), ...serviceHint(customer) };
 }
 
 export async function saveCustomer(input, ctx) {
@@ -70,5 +98,10 @@ export async function saveCustomer(input, ctx) {
     !customer.vehicles.length && 'авто (марка, модель, рік)',
   ].filter(Boolean);
 
-  return { saved: true, customer: forModel(customer), still_missing: missing };
+  return {
+    saved: true,
+    customer: forModel(customer),
+    still_missing: missing,
+    ...serviceHint(customer),
+  };
 }

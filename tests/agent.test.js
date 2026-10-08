@@ -148,9 +148,10 @@ describe('схеми інструментів', () => {
     }
   });
 
-  test('п\'ять інструментів, без календарних', () => {
+  test('шість інструментів, без календарних', () => {
     const names = toolDefinitions.map((t) => t.name).sort();
     assert.deepEqual(names, [
+      'close_conversation',
       'create_request',
       'estimate_price',
       'handoff_to_admin',
@@ -298,11 +299,75 @@ describe('сховище', () => {
     // Свідомо беремо дату в минулому: «сьогодні» вже нарахували інші
     // тести цього файлу, і лічильник був би не з нуля.
     const past = new Date('2020-03-04T10:00:00Z');
-    await store.bumpStat('requests', past);
-    await store.bumpStat('requests', new Date('2020-03-04T10:05:00Z'));
+    await store.bumpStat('requests', 1, past);
+    await store.bumpStat('requests', 1, new Date('2020-03-04T10:05:00Z'));
     const stats = await store.readStats(store.statDay(past));
     assert.equal(stats.requests, 2);
     assert.equal(stats.handoffs, 0, 'інші лічильники того дня мусять лишитись нулями');
+  });
+});
+
+describe('оцінки', () => {
+  const closed = async (externalId) => {
+    const conversation = await store.loadConversation('web', externalId);
+    conversation.customerId = 'cust-' + externalId;
+    conversation.messages = [{ role: 'user', content: 'дякую, все' }];
+    await store.closeConversation(conversation);
+    return conversation;
+  };
+
+  test('оцінка зберігається рівно один раз', async () => {
+    const conversation = await closed('rate-1');
+
+    const first = await store.saveRating({ conversationId: conversation.id, score: 5 });
+    assert.equal(first.created, true);
+
+    const second = await store.saveRating({ conversationId: conversation.id, score: 1 });
+    assert.equal(second.created, false, 'друга оцінка того самого діалогу не створюється');
+    assert.equal(second.rating.score, 5, 'перша оцінка лишається недоторканою');
+  });
+
+  test('закриття лишає слід, за яким кнопка знайде діалог', async () => {
+    const conversation = await closed('rate-2');
+
+    const closure = await store.loadClosure(conversation.id);
+    assert.equal(closure.channel, 'web');
+    assert.equal(closure.externalId, 'rate-2');
+    assert.equal(closure.customerId, 'cust-rate-2', 'без клієнта етап B не порахує 90 днів');
+  });
+
+  test('коментар дописується до наявної оцінки, але не створює її', async () => {
+    const conversation = await closed('rate-3');
+
+    assert.equal(await store.setRatingComment(conversation.id, 'без оцінки'), null);
+
+    await store.saveRating({ conversationId: conversation.id, score: 4 });
+    const rated = await store.setRatingComment(conversation.id, 'усе сподобалось');
+    assert.equal(rated.comment, 'усе сподобалось');
+    assert.equal(rated.score, 4);
+  });
+
+  test('очікування коментаря знімається першим же читанням', async () => {
+    await store.expectComment('web', 'rate-4', 'conv-4');
+
+    assert.equal(await store.takeExpectedComment('web', 'rate-4'), 'conv-4');
+    assert.equal(
+      await store.takeExpectedComment('web', 'rate-4'),
+      null,
+      'друге повідомлення вже не коментар, інакше воно лягло б замість питання'
+    );
+  });
+
+  test('закритий діалог не продовжується, активний — продовжується', async () => {
+    const conversation = await closed('rate-5');
+
+    const next = await store.loadConversationForMessage('web', 'rate-5');
+    assert.notEqual(next.id, conversation.id, 'після закриття має починатись новий діалог');
+    assert.equal(next.messages.length, 0, 'стара історія не підтягується');
+
+    await store.saveConversation(next);
+    const same = await store.loadConversationForMessage('web', 'rate-5');
+    assert.equal(same.id, next.id, 'активний діалог продовжується, а не починається щоразу');
   });
 });
 

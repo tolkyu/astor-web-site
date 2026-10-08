@@ -190,3 +190,68 @@
 @media (prefers-reduced-motion: reduce) {
   .astor-typing span { animation: none; }
 }
+
+/* ── оцінка діалогу ───────────────────────────────────────────────────── */
+
+.astor-rate {
+  margin: 10px 0;
+  padding: 12px;
+  border: 1px solid rgba(0, 0, 0, .1);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.astor-rate-label {
+  font-size: 13px;
+  opacity: .8;
+  margin-bottom: 8px;
+}
+
+.astor-rate-stars { display: flex; gap: 4px; }
+
+.astor-rate-star {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 26px;
+  line-height: 1;
+  /* Погашена зірочка мусить читатись як зірочка, а не як пляма. */
+  color: rgba(0, 0, 0, .22);
+  transition: color .12s;
+}
+
+.astor-rate-star-on { color: #f5a623; }
+.astor-rate-star:disabled { cursor: default; }
+.astor-rate-star:focus-visible { outline: 2px solid var(--color-accent, #c8102e); outline-offset: 2px; }
+
+.astor-rate-comment { margin-top: 10px; }
+.astor-rate-comment .astor-chat-input { width: 100%; margin-bottom: 8px; }
+
+.astor-rate-actions { display: flex; gap: 8px; }
+
+.astor-rate-skip {
+  border: 1px solid rgba(0, 0, 0, .15);
+  background: none;
+  border-radius: 8px;
+  padding: 0 14px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.astor-rate-skip:disabled { opacity: .5; cursor: default; }
+
+.astor-rate-review {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 9px 16px;
+  border-radius: 8px;
+  background: var(--color-accent, #c8102e);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.astor-rate-review:hover { filter: brightness(1.08); }
+.astor-rate-review:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }

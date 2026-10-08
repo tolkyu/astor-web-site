@@ -15,9 +15,11 @@ import { escapeHtml, sendMessage } from './telegram.js';
 import {
   greet,
   handleAdminCommand,
+  handleCallback,
   handleClientMessage,
   handleContact,
   handleDeleteMe,
+  handleFinish,
   isAdmin,
 } from './agent/telegramAgent.js';
 
@@ -95,6 +97,7 @@ function handleCommand(command, msg) {
           '/id — id цього чату (для .env)',
           '/ping — перевірка, що бот живий',
           ...(isTarget ? ['/agent — команди адміністратора'] : []),
+          ...(agentConfigured && !isTarget ? ['/finish — завершити діалог і оцінити спілкування'] : []),
           ...(agentConfigured ? ['/delete_me — видалити мої дані'] : []),
         ].join('\n')
       );
@@ -132,6 +135,13 @@ const sendPlain = (chatId, text) => reply(chatId, escapeHtml(text));
  * забрав би з собою /ping і /id, якими його ж і діагностують.
  */
 export async function processUpdate(update) {
+  // Натискання inline-кнопки приходить окремим типом оновлення, не
+  // повідомленням. Поки що такі кнопки є лише в оцінки діалогу.
+  if (update.callback_query) {
+    if (agentConfigured) await handleCallback(update.callback_query);
+    return;
+  }
+
   const msg = update.message;
   if (!msg?.chat) return;
 
@@ -154,6 +164,12 @@ export async function processUpdate(update) {
   if (parsed) {
     if (parsed.command === '/delete_me' && agentConfigured) {
       await handleDeleteMe(msg.chat.id);
+      return;
+    }
+    // /finish закриває діалог клієнта. В адміністраторському чаті діалогу
+    // немає, тож там команда не має сенсу й іде звичайним шляхом.
+    if (parsed.command === '/finish' && agentConfigured && !isAdmin(msg.chat.id)) {
+      await handleFinish(msg.chat.id);
       return;
     }
     if (agentConfigured && isAdmin(msg.chat.id)) {
@@ -181,7 +197,7 @@ async function poll() {
         body: JSON.stringify({
           offset,
           timeout: 30,
-          allowed_updates: ['message'],
+          allowed_updates: ['message', 'callback_query'],
         }),
         signal: controller.signal,
       });
