@@ -3,6 +3,7 @@ import path from 'node:path';
 import { ROOT, config, assertConfig } from './config.js';
 import { router, bookingHandler } from './routes.js';
 import { adminRouter } from './adminRoutes.js';
+import { chatRouter } from './chatRoutes.js';
 import { cacheHeader, renderPage } from './render.js';
 export function buildApp() {
   assertConfig();
@@ -32,6 +33,8 @@ export function buildApp() {
   });
   app.use(express.urlencoded({extended:false,limit:'16kb'}));
   app.use('/api/admin',adminRouter);
+  // До /api, інакше 404-гілка загального роутера перехопила б /api/chat.
+  app.use('/api/chat',chatRouter);
   app.use('/api',router);
   app.post('/request',bookingHandler);
   app.get('/admin', (req,res) => {

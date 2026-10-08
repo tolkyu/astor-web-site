@@ -9,8 +9,17 @@
  *
  * Обробник оновлення (processUpdate) спільний для обох режимів.
  */
-import { config, telegramConfigured } from './config.js';
+import { waitUntil } from '@vercel/functions';
+import { config, telegramConfigured, agentConfigured } from './config.js';
 import { escapeHtml, sendMessage } from './telegram.js';
+import {
+  greet,
+  handleAdminCommand,
+  handleClientMessage,
+  handleContact,
+  handleDeleteMe,
+  isAdmin,
+} from './agent/telegramAgent.js';
 
 const API = 'https://api.telegram.org';
 
@@ -56,6 +65,9 @@ function handleCommand(command, msg) {
 
   switch (command) {
     case '/start':
+      // Для адміністратора це службовий чат, для клієнта — вхід у діалог
+      // з агентом. Один бот, дві різні перші репліки.
+      if (!isTarget && agentConfigured) return greet(chatId);
       return reply(
         chatId,
         [
@@ -79,9 +91,11 @@ function handleCommand(command, msg) {
         [
           '<b>Команди</b>',
           '',
-          '/start — що це за бот і куди йдуть заявки',
+          '/start — почати спочатку',
           '/id — id цього чату (для .env)',
           '/ping — перевірка, що бот живий',
+          ...(isTarget ? ['/agent — команди адміністратора'] : []),
+          ...(agentConfigured ? ['/delete_me — видалити мої дані'] : []),
         ].join('\n')
       );
 
@@ -96,17 +110,65 @@ function handleCommand(command, msg) {
   }
 }
 
-/** Експортовано, щоб можна було прогнати обробник без справжнього Telegram-оновлення. */
+/**
+ * Чи є текст командою. У групах команди приходять як «/start@ім'я_бота» —
+ * відрізаємо суфікс. Самотній «/» командою не вважаємо.
+ */
+function parseCommand(text) {
+  const parts = text.trim().split(/\s+/);
+  if (!parts[0].startsWith('/') || parts[0].length < 2) return null;
+  return { command: parts[0].split('@')[0].toLowerCase(), args: parts.slice(1) };
+}
+
+/** Проста відповідь без залежності від agent/telegramAgent.js. */
+const sendPlain = (chatId, text) => reply(chatId, escapeHtml(text));
+
+/**
+ * Маршрутизація одного оновлення. Експортовано, щоб можна було прогнати
+ * обробник без справжнього Telegram-оновлення.
+ *
+ * Порядок має значення: спершу службові команди — вони мусять працювати
+ * завжди, навіть без ключа Claude. Інакше зламаний або невимкнений агент
+ * забрав би з собою /ping і /id, якими його ж і діагностують.
+ */
 export async function processUpdate(update) {
   const msg = update.message;
-  if (!msg?.text) return;
+  if (!msg?.chat) return;
 
-  // У групах команди приходять як «/start@ім'я_бота» — відрізаємо суфікс.
-  const first = msg.text.trim().split(/\s+/)[0];
-  if (!first.startsWith('/')) return;
-  const command = first.split('@')[0].toLowerCase();
+  // Кнопка «Поділитись номером» надсилає контакт, а не текст.
+  if (msg.contact) {
+    if (agentConfigured) await handleContact(msg);
+    return;
+  }
 
-  await handleCommand(command, msg);
+  if (!msg.text) {
+    // Голосові, фото й файли в цій ітерації не обробляються.
+    if (agentConfigured && !isAdmin(msg.chat.id)) {
+      await sendPlain(msg.chat.id, 'Поки що я читаю лише текст — опишіть, будь ласка, проблему словами.');
+    }
+    return;
+  }
+
+  const parsed = parseCommand(msg.text);
+
+  if (parsed) {
+    if (parsed.command === '/delete_me' && agentConfigured) {
+      await handleDeleteMe(msg.chat.id);
+      return;
+    }
+    if (agentConfigured && isAdmin(msg.chat.id)) {
+      const handled = await handleAdminCommand(parsed.command, parsed.args, msg);
+      if (handled) return;
+    }
+    await handleCommand(parsed.command, msg);
+    return;
+  }
+
+  // Не команда — отже, клієнт говорить з агентом. Адміністраторський чат
+  // лишаємо тихим: туди падають заявки, і вести там діалог нема з ким.
+  if (agentConfigured && !isAdmin(msg.chat.id)) {
+    await handleClientMessage(msg);
+  }
 }
 
 async function poll() {
@@ -189,12 +251,16 @@ export async function handleWebhook(req, res) {
     return res.status(401).json({ ok: false });
   }
 
-  // Завершуємо роботу до відповіді, щоб serverless не зупинив її посеред запиту.
-  try {
-    await processUpdate(req.body || {});
-    res.status(200).json({ ok: true });
-  } catch (err) {
-    console.error('[bot] webhook: помилка обробки:', err.message);
-    res.status(500).json({ ok: false });
-  }
+  // Telegram повторює оновлення, якщо не дочекався 200. Відповідь агента —
+  // це запит до Claude на 5–20 секунд, тож спершу підтверджуємо доставку,
+  // а обробку доручаємо waitUntil: без цього кожна повільна відповідь
+  // поверталась би клієнту дублем, бо Telegram надіслав би оновлення ще раз.
+  const update = req.body || {};
+  res.status(200).json({ ok: true });
+
+  waitUntil(
+    processUpdate(update).catch((err) => {
+      console.error('[bot] webhook: помилка обробки:', err.message);
+    })
+  );
 }

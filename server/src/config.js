@@ -50,6 +50,34 @@ export const config = {
     windowMs: int(process.env.RATE_LIMIT_WINDOW_MS, 10 * 60 * 1000), // 10 хв
     maxBookings: int(process.env.RATE_LIMIT_MAX_BOOKINGS, 5),
     maxLeads: int(process.env.RATE_LIMIT_MAX_LEADS, 30),
+    // Чат з агентом: кожне повідомлення — це запит до Claude API, тобто
+    // реальні гроші. Ліміт тут захищає не стільки сервер, скільки рахунок.
+    maxChatPerSession: int(process.env.RATE_LIMIT_MAX_CHAT, 20),
+    chatWindowMs: int(process.env.RATE_LIMIT_CHAT_WINDOW_MS, 10 * 60 * 1000),
+    maxChatPerIp: int(process.env.RATE_LIMIT_MAX_CHAT_IP, 200),
+  },
+
+  // AI-агент: приймає клієнтів у чаті на сайті і в Telegram.
+  agent: {
+    apiKey: process.env.ANTHROPIC_API_KEY || '',
+    // План обрав Sonnet як баланс ціни і якості для діалогу.
+    model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-5',
+    // Коротка відповідь адміністратора автосервісу, не есе.
+    maxTokens: int(process.env.ANTHROPIC_MAX_TOKENS, 2048),
+    // Діалог має відповідати швидко; глибоке міркування тут не потрібне.
+    effort: process.env.ANTHROPIC_EFFORT || 'low',
+    // Скільки разів модель може викликати інструменти в межах одного
+    // повідомлення клієнта, перш ніж ми зупинимо цикл.
+    maxIterations: int(process.env.AGENT_MAX_ITERATIONS, 8),
+    // Скільки останніх повідомлень тримати в контексті (решта — у резюме).
+    historyLimit: int(process.env.AGENT_HISTORY_LIMIT, 30),
+    // Алерт адміну, якщо один діалог спалив більше токенів.
+    tokenAlertThreshold: int(process.env.AGENT_TOKEN_ALERT, 50_000),
+    // Дозволені джерела для віджета. Порожньо = лише свій домен (same-origin).
+    widgetOrigins: (process.env.WEB_WIDGET_ORIGIN || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
   },
 
   // Резервна копія заявок на диску — щоб нічого не загубилось, якщо Telegram лежить.
@@ -77,6 +105,12 @@ export const config = {
 };
 
 export const telegramConfigured = Boolean(config.telegram.token && config.telegram.chatId);
+
+/**
+ * Агент вимагає лише ключ Claude API. Без нього сайт і заявки працюють
+ * як раніше — зникає тільки чат.
+ */
+export const agentConfigured = Boolean(config.agent.apiKey);
 
 /** Кидає помилку, якщо конфіг непридатний для запуску. */
 export function assertConfig() {

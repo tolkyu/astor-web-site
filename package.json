@@ -15,9 +15,12 @@
     "tg:chat-id": "node server/scripts/chat-id.js",
     "tg:test": "node server/scripts/test-send.js",
     "tg:webhook": "node server/scripts/webhook.js",
-    "admin:hash": "node server/scripts/admin-hash.js"
+    "admin:hash": "node server/scripts/admin-hash.js",
+    "chat": "node server/scripts/chat.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.132.0",
+    "@vercel/functions": "^3.9.11",
     "express": "^5.1.0"
   }
 }

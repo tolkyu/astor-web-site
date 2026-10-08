@@ -65,6 +65,24 @@ async function hitRedis(key, windowMs, max) {
   };
 }
 
+/**
+ * Одне влучання по лічильнику, без Express — там, де немає req/res.
+ * Потрібне для ліміту на користувача Telegram.
+ *
+ * Чому не Map у модулі: у serverless кожне оновлення від Telegram — це
+ * окремий запуск функції з чистою памʼяттю, тож лічильник у процесі
+ * нічого не обмежує. Рахувати можна лише в Redis.
+ */
+export async function hit(name, id, windowMs, max) {
+  const key = `rl:${name}:${id}`;
+  try {
+    return redisConfigured ? await hitRedis(key, windowMs, max) : hitMemory(key, windowMs, max);
+  } catch (err) {
+    console.error('[rateLimit] Redis недоступний:', err.message);
+    return hitMemory(key, windowMs, max);
+  }
+}
+
 /* ── middleware ─────────────────────────────────────────────────────── */
 
 export function rateLimit(name, windowMs, max, { strict = false } = {}) {

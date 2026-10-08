@@ -3,8 +3,16 @@
   "framework": null,
   "buildCommand": "",
   "outputDirectory": "public",
-  "crons": [{ "path": "/api/jobs/retry", "schedule": "0 7 * * *" }],
-  "functions": { "api/index.js": { "includeFiles": "server/templates/**" } },
+  "crons": [
+    { "path": "/api/jobs/retry", "schedule": "0 7 * * *" },
+    { "path": "/api/jobs/daily-report", "schedule": "0 17 * * *" }
+  ],
+  "functions": {
+    "api/index.js": {
+      "includeFiles": "{server/templates,content}/**",
+      "maxDuration": 60
+    }
+  },
   "rewrites": [
     { "source": "/", "destination": "/api/index" },
     { "source": "/index.html", "destination": "/api/index" },

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
-import { config, telegramConfigured } from './config.js';
+import { config, telegramConfigured, agentConfigured } from './config.js';
 import { rateLimit } from './rateLimit.js';
 import { validateBooking } from './validate.js';
 import { handleWebhook } from './bot.js';
@@ -8,6 +8,7 @@ import { redisConfigured, redisPing } from './redis.js';
 import { acceptBooking, retryPending } from './bookings.js';
 import { site } from './site.js';
 import { esc } from './render.js';
+import { sendDailyReport } from './agent/dailyReport.js';
 export const router=Router();
 const limiter=rateLimit('booking',config.rateLimit.windowMs,config.rateLimit.maxBookings);
 function respond(req,res,status,body){
@@ -44,7 +45,9 @@ router.post('/telegram/webhook',handleWebhook);
 router.get('/health',async(req,res)=>{
   const storage=redisConfigured?await redisPing():{ok:!config.isServerless};
   const ok=storage.ok&&(telegramConfigured||config.allowDryRun);
-  res.status(ok?200:503).json({ok,storage:storage.ok?(redisConfigured?'redis':'file'):'unavailable',telegram:telegramConfigured?'configured':'dry-run'});
+  // Агент не впливає на ok: без ключа сайт і заявки працюють як раніше,
+  // зникає лише чат. Падати через це здоровою перевіркою не можна.
+  res.status(ok?200:503).json({ok,storage:storage.ok?(redisConfigured?'redis':'file'):'unavailable',telegram:telegramConfigured?'configured':'dry-run',agent:agentConfigured?config.agent.model:'disabled'});
 });
 function validCron(req){
   const actual=Buffer.from(req.get('authorization')||''),expected=Buffer.from('Bearer '+(process.env.CRON_SECRET||''));
@@ -53,4 +56,11 @@ function validCron(req){
 router.get('/jobs/retry',async(req,res,next)=>{
   if(!validCron(req))return res.status(401).json({ok:false});
   try{res.json({ok:true,result:await retryPending()});}catch(err){next(err);}
+});
+// Щоденний звіт адміну. Vercel запускає крони за UTC, тому 17:00 UTC —
+// це 20:00 за Києвом улітку і 19:00 узимку; точність до години тут не
+// критична, а переносити крон двічі на рік ніхто не стане.
+router.get('/jobs/daily-report',async(req,res,next)=>{
+  if(!validCron(req))return res.status(401).json({ok:false});
+  try{res.json({ok:true,result:await sendDailyReport()});}catch(err){next(err);}
 });
