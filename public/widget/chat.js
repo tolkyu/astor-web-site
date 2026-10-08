@@ -133,9 +133,20 @@
     el.finishButton.type = 'button';
     el.finish.appendChild(el.finishButton);
 
+    // Те, що лишається замість поля вводу, коли розмову завершено й
+    // оцінено. Без цього рядка клієнт із новим питанням опинився б у
+    // глухому куті: написати нема куди, а що робити — незрозуміло.
+    el.ended = node('div', 'astor-chat-ended');
+    el.ended.hidden = true;
+    el.ended.appendChild(node('span', null, 'Розмову завершено.'));
+    el.restart = node('button', null, 'Почати нову розмову');
+    el.restart.type = 'button';
+    el.ended.appendChild(el.restart);
+
     el.panel.appendChild(head);
     el.panel.appendChild(el.log);
     el.panel.appendChild(el.finish);
+    el.panel.appendChild(el.ended);
     el.panel.appendChild(el.form);
 
     document.body.appendChild(el.toggle);
@@ -186,6 +197,48 @@
     el.form.hidden = true;
     el.finish.hidden = true;
     addPhoneNote(message);
+  }
+
+  /**
+   * Оцінку поставлено — розмова скінчилась остаточно.
+   *
+   * Поле вводу ховаємо: написати після оцінки означало б почати новий
+   * діалог, у якому висить блок оцінки попереднього, і клієнт не розуміє,
+   * чому бот не пам'ятає розмови, яку бачить на екрані. Замість поля —
+   * явна кнопка, яка цей новий діалог і починає.
+   *
+   * Коментар це не блокує: для нього своє поле всередині блоку оцінки.
+   */
+  function endChat() {
+    state.closed = true;
+    el.form.hidden = true;
+    el.finish.hidden = true;
+    el.ended.hidden = false;
+  }
+
+  /**
+   * «Почати нову розмову»: нова сесія, чистий лог, поле вводу назад.
+   *
+   * Саме нова сесія, а не просто очищений екран: session_id — це ключ
+   * діалогу на сервері, і новий id гарантує, що модель не побачить ні
+   * рядка з попередньої розмови.
+   */
+  function restart() {
+    clearToken();
+    state.token = null;
+    state.started = false;
+    state.closed = false;
+    state.busy = false;
+
+    while (el.log.firstChild) el.log.removeChild(el.log.firstChild);
+
+    el.ended.hidden = true;
+    el.finish.hidden = true;
+    el.form.hidden = false;
+    el.input.disabled = false;
+    el.send.disabled = false;
+
+    startSession().then(function () { el.input.focus(); });
   }
 
   /** Кнопку завершення показуємо лише коли сервер каже, що клієнт відомий. */
@@ -248,8 +301,10 @@
         .then(function (res) {
           if (!res.data.ok) {
             wrap.appendChild(node('div', 'astor-rate-label', 'Не вдалося зберегти оцінку.'));
+            // Оцінка не лягла — не замикаємо чат, хай спробує інакше.
             return;
           }
+          endChat();
           askComment(wrap, conversationId);
           // Сервер сам вирішує, чи просити відгук (оцінка 4–5 і не частіше
           // ніж раз на 90 днів). Віджет лише показує те, що йому дали.
@@ -343,11 +398,10 @@
         .catch(function () { done('Коментар не дійшов, але оцінку збережено.'); });
     });
 
+    // «Пропустити» на сервер не ходить: коментар необов'язковий, і ніхто
+    // на нього не чекає — на сайті він пишеться в це поле, а не наступним
+    // повідомленням, як у Telegram.
     skip.addEventListener('click', function () {
-      save.disabled = true;
-      skip.disabled = true;
-      post('/rate', { token: state.token, conversation_id: conversationId, skip: true })
-        .catch(function () { /* не критично: прапорець і так спливе за годину */ });
       done('Дякуємо за оцінку!');
     });
 
@@ -503,6 +557,7 @@
     el.close.addEventListener('click', close);
     el.form.addEventListener('submit', submit);
     el.finishButton.addEventListener('click', finishChat);
+    el.restart.addEventListener('click', restart);
 
     // Enter надсилає, Shift+Enter переносить рядок — як у месенджерах.
     el.input.addEventListener('keydown', function (event) {

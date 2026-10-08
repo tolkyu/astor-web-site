@@ -472,20 +472,46 @@ test('close_conversation закриває діалог і відкриває о�
   const rating = await store.getRating(conversationId);
   assert.equal(rating.score, 5, 'перша оцінка лишається');
 
-  // Наступне повідомлення — це коментар, а не нове питання.
-  const commented = await post('/api/chat', { token, message: 'Все швидко, дякую майстрам' });
-  assert.equal(commented.body.reply, 'Дякую, передав майстерні.');
+  // Коментар іде своїм полем, із явним id діалогу.
+  const commented = await post('/api/chat/rate', {
+    token,
+    conversation_id: conversationId,
+    comment: 'Все швидко, дякую майстрам',
+  });
+  assert.equal(commented.body.commented, true);
   assert.equal((await store.getRating(conversationId)).comment, 'Все швидко, дякую майстрам');
 
-  // А вже наступне — новий діалог, без старої історії.
+  // Повідомлення після оцінки — це НОВИЙ діалог, а не коментар. У віджеті
+  // поле вводу тут уже сховане, але перевіряємо саме сервер: інакше
+  // клієнт, що перезавантажив сторінку й поставив нове питання, отримав
+  // би «дякую, передав майстерні», а питання лягло б у comment.
   scripted = [{ content: text('Вітаю! Що з автомобілем?') }];
   const fresh = await post('/api/chat', { token, message: 'А ще хочу запитати про гальма' });
   assert.equal(fresh.status, 200);
+  assert.equal(fresh.body.reply, 'Вітаю! Що з автомобілем?', 'питання мусить дійти до моделі');
 
   const sentMessages = claudeCalls.at(-1).messages;
   assert.equal(sentMessages.length, 1, 'новий діалог: модель не бачить старої історії');
   assert.equal(sentMessages[0].content, 'А ще хочу запитати про гальма');
   assert.notEqual(fresh.body.conversation_id, conversationId);
+
+  // І коментар від цього не постраждав.
+  assert.equal((await store.getRating(conversationId)).comment, 'Все швидко, дякую майстрам');
+});
+
+test('коментар до чужої оцінки не дописати', async () => {
+  const { token, conversationId } = await closedDialog();
+  await post('/api/chat/rate', { token, conversation_id: conversationId, score: 4 });
+
+  const stranger = await post('/api/chat/session', {});
+  const res = await post('/api/chat/rate', {
+    token: stranger.body.token,
+    conversation_id: conversationId,
+    comment: 'підроблений коментар',
+  });
+
+  assert.equal(res.body.commented, false);
+  assert.equal((await store.getRating(conversationId)).comment, null);
 });
 
 test('оцінка 1–2 кличе адміна одразу, разом із коментарем', async () => {

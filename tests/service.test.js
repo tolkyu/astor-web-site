@@ -466,3 +466,48 @@ test('/finish просить оцінку лише в клієнта з імен
   assert.equal(stars.length, 5);
   assert.ok(stars[0].callback_data.startsWith('rate:'));
 });
+
+test('у Telegram наступне повідомлення після оцінки стає коментарем', async () => {
+  const chatId = '55022';
+  await store.upsertCustomer({ name: 'Юрій', phone: '+380507776611', telegramId: chatId });
+
+  // lookup_customer кладе id клієнта в діалог — без нього діалог нічий,
+  // і оцінку з нього не візьмуть.
+  scripted = [
+    { content: [toolUse('lookup_customer', { phone: null })] },
+    { content: text('Слухаю вас.') },
+  ];
+  await processUpdate(message(chatId, 'Доброго дня'));
+
+  telegramCalls = [];
+  await processUpdate(message(chatId, '/finish'));
+
+  const prompt = telegramCalls.find((call) => call.text?.includes('Оцініть'));
+  assert.ok(prompt, 'зірочки мусять прийти');
+  const [, conversationId] = prompt.reply_markup.inline_keyboard.flat()[0].callback_data.split(':');
+
+  telegramCalls = [];
+  await processUpdate(callbackUpdate(chatId, `rate:${conversationId}:2`));
+  assert.ok(
+    telegramCalls.some((call) => call.text?.includes('Хочете додати коментар')),
+    'після бала просимо коментар'
+  );
+
+  // Тут немає окремого поля, тож коментарем стає наступна репліка.
+  telegramCalls = [];
+  await processUpdate(message(chatId, 'Довго не брали слухавку'));
+  assert.equal((await store.getRating(conversationId)).comment, 'Довго не брали слухавку');
+  assert.ok(telegramCalls.some((call) => call.text?.includes('Дякую, передав майстерні')));
+
+  // Низька оцінка плюс коментар — адміністратор отримує обидва.
+  assert.ok(telegramCalls.some((call) => call.text?.includes('Довго не брали слухавку')));
+
+  // А вже наступне повідомлення — звичайне питання, не другий коментар.
+  scripted = [{ content: text('Вітаю! Що з автомобілем?') }];
+  telegramCalls = [];
+  await processUpdate(message(chatId, 'А скільки коштує розвал?'));
+  assert.ok(
+    telegramCalls.some((call) => call.text?.includes('Що з автомобілем')),
+    'друге повідомлення мусить піти в агента: ' + JSON.stringify(telegramCalls.map((c) => c.text))
+  );
+});

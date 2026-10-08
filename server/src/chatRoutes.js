@@ -32,7 +32,7 @@ import {
   loadConversationForMessage,
 } from './agentStore.js';
 import { runAgent } from './agent/run.js';
-import { REVIEW_INVITE, recordComment, recordScore, reviewUrl, skipComment } from './agent/ratings.js';
+import { REVIEW_INVITE, addComment, recordScore, reviewUrl } from './agent/ratings.js';
 import { site } from './site.js';
 
 export const chatRouter = Router();
@@ -236,12 +236,6 @@ chatRouter.post('/', perIp, perSession, async (req, res) => {
   if (!message) return res.status(400).json({ ok: false, error: 'empty_message' });
 
   try {
-    // Коментар до оцінки перехоплюємо до моделі — так само, як у Telegram.
-    const comment = await recordComment({ channel: 'web', externalId: req.sessionId, text: message });
-    if (comment) {
-      return res.json({ ok: true, reply: 'Дякую, передав майстерні.', status: 'closed' });
-    }
-
     const conversation = await loadConversationForMessage('web', req.sessionId);
     const result = await runAgent(conversation, message);
 
@@ -279,23 +273,19 @@ chatRouter.post('/', perIp, perSession, async (req, res) => {
  * conversation_id із session_id, тож чужу розмову оцінити не вийде навіть
  * із чужим id у тілі запиту.
  *
- * Той самий ендпоінт приймає коментар (score без comment, потім comment
- * без score) і відмову від нього — віджету простіше мати одну адресу, а
- * логіка все одно спільна з Telegram (agent/ratings.js).
+ * Той самий ендпоінт приймає і бал, і коментар — віджету простіше мати
+ * одну адресу. «Пропустити» на сервер не ходить узагалі: на сайті
+ * коментар пишеться в окреме поле, і якщо клієнт його не заповнив, нічого
+ * не сталося — чекати тут нема на що.
  */
 chatRouter.post('/rate', perIp, requireSession, rateLimit('chat-rate', 600_000, 30), async (req, res) => {
   const conversationId = String(req.body?.conversation_id ?? '');
   if (!conversationId) return res.status(400).json({ ok: false, error: 'no_conversation' });
 
-  // «Пропустити» — знімаємо очікування коментаря й нічого більше.
-  if (req.body?.skip) {
-    await skipComment({ channel: 'web', externalId: req.sessionId });
-    return res.json({ ok: true, skipped: true });
-  }
-
   const rawComment = req.body?.comment;
   if (rawComment !== undefined && rawComment !== null) {
-    const rating = await recordComment({
+    const rating = await addComment({
+      conversationId,
       channel: 'web',
       externalId: req.sessionId,
       text: String(rawComment).slice(0, MAX_MESSAGE_CHARS),

@@ -104,9 +104,15 @@ export async function recordScore({ conversationId, score, channel, externalId }
     rating.score <= LOW_SCORE ? bumpStat('ratingsLow') : null,
   ].filter(Boolean));
 
-  // Коментар чекаємо від будь-якої оцінки: «усе сподобалось, дякую» теж
-  // варто прочитати.
-  await expectComment(closure.channel, closure.externalId, conversationId);
+  // «Наступне повідомлення — це коментар» потрібне ЛИШЕ в Telegram: там
+  // немає окремого поля, і єдиний спосіб дати клієнту дописати — чекати
+  // на його наступну репліку. У чаті на сайті поле є, і цей механізм там
+  // не просто зайвий, а шкідливий: клієнт, що після оцінки перезавантажив
+  // сторінку й поставив нове питання, отримав би на нього «дякую, передав
+  // майстерні», а саме питання лягло б у comment.
+  if (closure.channel === 'telegram') {
+    await expectComment(closure.channel, closure.externalId, conversationId);
+  }
 
   if (rating.score <= LOW_SCORE) {
     const customer = closure.customerId ? await getCustomer(closure.customerId) : null;
@@ -134,20 +140,8 @@ export const REVIEW_INVITE =
 
 export const reviewUrl = () => config.agent.googleReviewUrl;
 
-/**
- * Текст після оцінки — коментар, якщо його справді чекали.
- *
- * Прапорець очікування знімається читанням (GETDEL), тож друге
- * повідомлення вже піде звичайним шляхом і почне новий діалог. Інакше
- * клієнт, який після оцінки написав «а ще питання по гальмах», лишився б
- * без відповіді, бо його питання лягло б у comment.
- *
- * @returns {Promise<object|null>} оцінка з коментарем, або null, якщо не чекали
- */
-export async function recordComment({ channel, externalId, text }) {
-  const conversationId = await takeExpectedComment(channel, externalId);
-  if (!conversationId) return null;
-
+/** Спільний хвіст обох шляхів: записати коментар і, якщо оцінка низька, переслати. */
+async function saveComment(conversationId, text) {
   const comment = String(text ?? '').trim().slice(0, 1000);
   if (!comment) return null;
 
@@ -162,7 +156,39 @@ export async function recordComment({ channel, externalId, text }) {
   return rating;
 }
 
-/** Кнопка «Пропустити»: коментаря не буде. */
+/**
+ * Telegram: текст після оцінки — це коментар, якщо його справді чекали.
+ *
+ * Прапорець очікування знімається читанням (GETDEL), тож друге
+ * повідомлення вже піде звичайним шляхом і почне новий діалог. Інакше
+ * клієнт, який після оцінки написав «а ще питання по гальмах», лишився б
+ * без відповіді, бо його питання лягло б у comment.
+ *
+ * @returns {Promise<object|null>} оцінка з коментарем, або null, якщо не чекали
+ */
+export async function recordComment({ channel, externalId, text }) {
+  const conversationId = await takeExpectedComment(channel, externalId);
+  if (!conversationId) return null;
+  return saveComment(conversationId, text);
+}
+
+/**
+ * Чат на сайті: коментар до конкретної оцінки, названої явно.
+ *
+ * Діалог звіряється з сесією так само, як при виставленні бала, — інакше
+ * будь-хто зі `conversation_id` дописував би коментарі до чужих оцінок.
+ *
+ * @returns {Promise<object|null>} оцінка з коментарем, або null
+ */
+export async function addComment({ conversationId, channel, externalId, text }) {
+  const closure = await loadClosure(conversationId);
+  if (!closure) return null;
+  if (closure.channel !== channel || closure.externalId !== String(externalId)) return null;
+
+  return saveComment(conversationId, text);
+}
+
+/** Кнопка «Пропустити» в Telegram: коментаря не буде. */
 export async function skipComment({ channel, externalId }) {
   await forgetExpectedComment(channel, externalId);
 }
