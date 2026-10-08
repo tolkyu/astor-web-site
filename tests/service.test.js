@@ -424,3 +424,45 @@ test('пробіг, названий у розмові, сам виводить 
   const refused = await dispatchTool('save_customer', fabia(82_000), ctx());
   assert.equal(refused.result.service_due, undefined);
 });
+
+/* ── оцінка лише від названого клієнта (Telegram) ────────────────────── */
+
+test('/finish просить оцінку лише в клієнта з іменем і телефоном', async () => {
+  // Анонім: у Telegram ми знаємо chat_id, але не ім'я й не номер.
+  const anon = '55020';
+  scripted = [{ content: text('Заміна оливи — від 500 грн.') }];
+  await processUpdate(message(anon, 'Скільки коштує заміна оливи?'));
+
+  telegramCalls = [];
+  await processUpdate(message(anon, '/finish'));
+
+  assert.ok(
+    telegramCalls.some((call) => call.text?.includes('Дякую за звернення')),
+    'діалог усе одно закривається'
+  );
+  assert.ok(
+    !telegramCalls.some((call) => call.text?.includes('Оцініть')),
+    'але зірочок анонімному гостю не показуємо: ' + JSON.stringify(telegramCalls.map((c) => c.text))
+  );
+  assert.equal((await store.loadConversation('telegram', anon)).status, 'closed');
+
+  // А тепер клієнт, який назвався.
+  const known = '55021';
+  await store.upsertCustomer({ name: 'Леся', phone: '+380504443322', telegramId: known });
+
+  scripted = [
+    { content: [toolUse('lookup_customer', { phone: null })] },
+    { content: text('Вітаю, Лесю! Чим допомогти?') },
+  ];
+  await processUpdate(message(known, 'Доброго дня'));
+
+  telegramCalls = [];
+  await processUpdate(message(known, '/finish'));
+
+  const prompt = telegramCalls.find((call) => call.text?.includes('Оцініть'));
+  assert.ok(prompt, 'названому клієнту зірочки показуємо: ' + JSON.stringify(telegramCalls.map((c) => c.text)));
+
+  const stars = prompt.reply_markup.inline_keyboard.flat();
+  assert.equal(stars.length, 5);
+  assert.ok(stars[0].callback_data.startsWith('rate:'));
+});

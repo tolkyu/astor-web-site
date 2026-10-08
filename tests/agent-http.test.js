@@ -420,29 +420,45 @@ test('збій Claude API не показує клієнту помилку, а 
 
 /* ── закриття діалогу й оцінка ───────────────────────────────────────── */
 
-test('close_conversation закриває діалог і відкриває оцінку', async () => {
-  scripted = [];
-  telegramMessages = [];
+// Кожному діалогу — свій номер, інакше upsertCustomer зіставить їх в
+// одного клієнта, і квота «відгук раз на 90 днів» поїде між тестами.
+let phoneSeq = 0;
+const nextCustomer = () => ({
+  name: 'Клієнт',
+  phone: '050' + String(1_000_000 + (phoneSeq += 1)),
+  vehicle: { make: 'Skoda', model: 'Octavia', year: 2015, mileage_km: 150_000 },
+});
 
+/**
+ * Закриває свіжий діалог і повертає token та id.
+ *
+ * За замовчуванням клієнт називається: оцінку приймають лише від того, в
+ * кого є ім'я і телефон. `customer: null` дає анонімний діалог — для
+ * тестів, які перевіряють саме це правило.
+ */
+async function closedDialog({ customer = nextCustomer() } = {}) {
   const session = await post('/api/chat/session', {});
   const token = session.body.token;
 
   scripted = [
-    {
-      content: [
-        toolUse('close_conversation', {}),
-      ],
-    },
+    ...(customer ? [{ content: [toolUse('save_customer', customer)] }] : []),
+    { content: [toolUse('close_conversation', {})] },
     { content: text('Дякую за звернення! Гарної дороги.') },
   ];
 
   const closing = await post('/api/chat', { token, message: 'дякую, все' });
-  assert.equal(closing.status, 200);
-  assert.equal(closing.body.closed, true, 'віджет мусить дізнатись, що пора малювати зірочки');
-  assert.equal(closing.body.status, 'closed');
-  assert.ok(closing.body.conversation_id, 'без id діалогу оцінку нема до чого прив\'язати');
+  assert.equal(closing.body.closed, true, 'діалог мусив закритись');
+  return { token, conversationId: closing.body.conversation_id, body: closing.body };
+}
 
-  const conversationId = closing.body.conversation_id;
+test('close_conversation закриває діалог і відкриває оцінку', async () => {
+  telegramMessages = [];
+
+  const { token, conversationId, body } = await closedDialog();
+  assert.equal(body.closed, true, 'віджет мусить дізнатись, що пора малювати зірочки');
+  assert.equal(body.can_rate, true, 'клієнт назвався — зірочки показуємо');
+  assert.equal(body.status, 'closed');
+  assert.ok(conversationId, 'без id діалогу оцінку нема до чого прив\'язати');
 
   // Оцінка кладеться рівно один раз.
   const first = await post('/api/chat/rate', { token, conversation_id: conversationId, score: 5 });
@@ -473,15 +489,9 @@ test('close_conversation закриває діалог і відкриває о�
 });
 
 test('оцінка 1–2 кличе адміна одразу, разом із коментарем', async () => {
-  scripted = [{ content: [toolUse('close_conversation', {})] }, { content: text('Бувайте.') }];
   telegramMessages = [];
 
-  const session = await post('/api/chat/session', {});
-  const token = session.body.token;
-
-  const closing = await post('/api/chat', { token, message: 'все, дякую' });
-  const conversationId = closing.body.conversation_id;
-
+  const { token, conversationId } = await closedDialog();
   await post('/api/chat/rate', { token, conversation_id: conversationId, score: 2 });
 
   const alert = telegramMessages.find((message) => message.includes('Низька оцінка'));
@@ -494,11 +504,7 @@ test('оцінка 1–2 кличе адміна одразу, разом із �
 });
 
 test('чужий діалог оцінити не можна', async () => {
-  scripted = [{ content: [toolUse('close_conversation', {})] }, { content: text('Бувайте.') }];
-
-  const victim = await post('/api/chat/session', {});
-  const closing = await post('/api/chat', { token: victim.body.token, message: 'дякую, все' });
-  const conversationId = closing.body.conversation_id;
+  const { conversationId } = await closedDialog();
 
   // Інша сесія знає id діалогу — і це все, що вона знає.
   const stranger = await post('/api/chat/session', {});
@@ -514,20 +520,74 @@ test('чужий діалог оцінити не можна', async () => {
 });
 
 test('оцінка поза 1–5 не зберігається', async () => {
-  scripted = [{ content: [toolUse('close_conversation', {})] }, { content: text('Бувайте.') }];
-
-  const session = await post('/api/chat/session', {});
-  const token = session.body.token;
-  const closing = await post('/api/chat', { token, message: 'дякую, все' });
+  const { token, conversationId } = await closedDialog();
 
   for (const score of [0, 6, 2.5, 'п\'ять']) {
-    const res = await post('/api/chat/rate', {
-      token,
-      conversation_id: closing.body.conversation_id,
-      score,
-    });
+    const res = await post('/api/chat/rate', { token, conversation_id: conversationId, score });
     assert.equal(res.status, 400, `бал ${score} мусить відхилятись`);
   }
+});
+
+test('анонімний гість діалог закриває, але оцінку не ставить', async () => {
+  const { token, conversationId, body } = await closedDialog({ customer: null });
+
+  assert.equal(body.closed, true, 'діалог усе одно закривається');
+  assert.equal(body.can_rate, false, 'але зірочки віджет не малює');
+
+  // І навіть якщо хтось надішле запит повз віджет.
+  const res = await post('/api/chat/rate', { token, conversation_id: conversationId, score: 5 });
+  assert.equal(res.status, 404);
+  assert.equal(res.body.error, 'not_identified');
+  assert.equal(await store.getRating(conversationId), null);
+});
+
+test('кнопка «Завершити чат і оцінити» з\'являється, коли клієнт назвався', async () => {
+  const session = await post('/api/chat/session', {});
+  const token = session.body.token;
+
+  // Поки клієнт лише питає — кнопки немає.
+  scripted = [{ content: text('Заміна оливи — від 500 грн.') }];
+  const asking = await post('/api/chat', { token, message: 'Скільки коштує заміна оливи?' });
+  assert.equal(asking.body.can_finish, false, 'анонімному гостю завершувати нема чого');
+
+  // Назвався — кнопка з'явилась.
+  scripted = [
+    { content: [toolUse('save_customer', nextCustomer())] },
+    { content: text('Записав. Ще щось підказати?') },
+  ];
+  const named = await post('/api/chat', { token, message: 'Олена, 050 111 22 33' });
+  assert.equal(named.body.can_finish, true);
+
+  // Натискання кнопки закриває діалог і дає id для зірочок.
+  const finished = await post('/api/chat/finish', { token });
+  assert.equal(finished.status, 200);
+  assert.equal(finished.body.closed, true);
+  assert.equal(finished.body.can_rate, true);
+  assert.ok(finished.body.conversation_id);
+
+  const rated = await post('/api/chat/rate', {
+    token,
+    conversation_id: finished.body.conversation_id,
+    score: 4,
+  });
+  assert.equal(rated.body.created, true);
+});
+
+test('завершити чат не можна, не назвавшись', async () => {
+  const session = await post('/api/chat/session', {});
+  const token = session.body.token;
+
+  // Порожній діалог завершувати нема чого.
+  const empty = await post('/api/chat/finish', { token });
+  assert.equal(empty.status, 400);
+  assert.equal(empty.body.error, 'empty_conversation');
+
+  scripted = [{ content: text('Слухаю.') }];
+  await post('/api/chat', { token, message: 'Доброго дня' });
+
+  const anonymous = await post('/api/chat/finish', { token });
+  assert.equal(anonymous.status, 400);
+  assert.equal(anonymous.body.error, 'not_identified');
 });
 
 test('щоденний звіт показує середній бал і кількість низьких', async () => {
@@ -553,24 +613,6 @@ test('щоденний звіт показує середній бал і кіл
 });
 
 /* ── посилання на відгук у Google ────────────────────────────────────── */
-
-/** Закриває свіжий діалог і повертає його token і id. */
-async function closedDialog(saveCustomerInput) {
-  const session = await post('/api/chat/session', {});
-  const token = session.body.token;
-
-  scripted = saveCustomerInput
-    ? [
-        { content: [toolUse('save_customer', saveCustomerInput)] },
-        { content: [toolUse('close_conversation', {})] },
-        { content: text('Дякую за звернення!') },
-      ]
-    : [{ content: [toolUse('close_conversation', {})] }, { content: text('Дякую за звернення!') }];
-
-  const closing = await post('/api/chat', { token, message: 'дякую, все' });
-  assert.equal(closing.body.closed, true, 'діалог мусив закритись');
-  return { token, conversationId: closing.body.conversation_id };
-}
 
 test('оцінка 5 показує кнопку відгуку, оцінка 3 — ні', async () => {
   const happy = await closedDialog();
@@ -610,7 +652,7 @@ test('другу оцінку 5 за тиждень просити про від
     vehicle: { make: 'Toyota', model: 'Corolla', year: 2019, mileage_km: 60000 },
   };
 
-  const firstVisit = await closedDialog(customer);
+  const firstVisit = await closedDialog({ customer });
   const first = await post('/api/chat/rate', {
     token: firstVisit.token,
     conversation_id: firstVisit.conversationId,
@@ -618,7 +660,7 @@ test('другу оцінку 5 за тиждень просити про від
   });
   assert.ok(first.body.review_url, 'першого разу посилання мусить бути');
 
-  const secondVisit = await closedDialog(customer);
+  const secondVisit = await closedDialog({ customer });
   const second = await post('/api/chat/rate', {
     token: secondVisit.token,
     conversation_id: secondVisit.conversationId,

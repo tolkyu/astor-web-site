@@ -269,9 +269,14 @@ export async function handleFinish(chatId) {
     return send(chatId, 'Діалог уже закрито. Напишіть, якщо з\'явиться нове питання.');
   }
 
-  await closeConversation(conversation);
+  const { closure } = await closeConversation(conversation);
   await send(chatId, 'Дякую за звернення! Гарної дороги.');
-  return sendRatingPrompt(chatId, conversation.id);
+
+  // Оцінку просимо лише в клієнта, який назвався: від анонімної зірочки
+  // користі немає — ні передзвонити на одиницю, ні відрахувати 90 днів
+  // до наступного прохання про відгук.
+  if (closure.ratable) return sendRatingPrompt(chatId, conversation.id);
+  return undefined;
 }
 
 /* ── нагадування про планове ТО ──────────────────────────────────────── */
@@ -389,8 +394,9 @@ export async function handleClientMessage(msg) {
   const result = await runAgent(conversation, msg.text, { telegramId: chatId });
   if (result.text) await send(chatId, escapeHtml(result.text));
 
-  // Агент сам вирішив, що розмова скінчилась.
-  if (result.closed) await sendRatingPrompt(chatId, result.conversationId);
+  // Агент сам вирішив, що розмова скінчилась. Зірочки — лише якщо клієнт
+  // назвався: ratable рахується при закритті, у closeConversation.
+  if (result.closed && result.ratable) await sendRatingPrompt(chatId, result.conversationId);
 }
 
 /** `/delete_me` — право клієнта на видалення своїх даних. */

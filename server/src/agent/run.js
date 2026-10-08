@@ -7,7 +7,7 @@
  */
 import Anthropic from '@anthropic-ai/sdk';
 import { config, agentConfigured } from '../config.js';
-import { bumpStat, closeConversation, saveConversation } from '../agentStore.js';
+import { bumpStat, closeConversation, isIdentified, saveConversation } from '../agentStore.js';
 import { notifyFailure } from '../notifyAdmin.js';
 import { site } from '../site.js';
 import { buildSystem } from './systemPrompt.js';
@@ -184,8 +184,11 @@ export async function runAgent(conversation, userMessage, options = {}) {
   // close_conversation лише виставив статус. Запис про закриття робимо
   // тут, бо саме тут історія вже дописана, а customerId — остаточний:
   // модель часто викликає save_customer і close_conversation одним ходом.
+  let ratable = false;
+
   if (conversation.status === 'closed') {
-    await closeConversation(conversation);
+    const { closure } = await closeConversation(conversation);
+    ratable = closure.ratable;
     await bumpStat('closed');
   } else {
     await saveConversation(conversation);
@@ -202,6 +205,11 @@ export async function runAgent(conversation, userMessage, options = {}) {
     // Канал має показати зірочки рівно один раз — на тому ході, що закрив
     // діалог. Самого статусу для цього мало: він лишається 'closed' і далі.
     closed: conversation.status === 'closed',
+    // Чи є сенс показувати зірочки: від анонімного гостя оцінку не беремо.
+    ratable,
+    // Чи вже можна запропонувати «Завершити чат і оцінити» — для діалогу,
+    // який ще триває.
+    identified: await isIdentified(conversation.customerId),
     conversationId: conversation.id,
   };
 }

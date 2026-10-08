@@ -207,7 +207,7 @@
   margin-bottom: 8px;
 }
 
-.astor-rate-stars { display: flex; gap: 4px; }
+.astor-rate-stars { display: flex; align-items: center; gap: 4px; }
 
 .astor-rate-star {
   border: 0;
@@ -222,7 +222,19 @@
 }
 
 .astor-rate-star-on { color: #f5a623; }
+/* Після вибору кнопки вимкнені, але оцінка мусить лишатись видимою:
+   opacity тут зробила б саме те, чого не треба. */
 .astor-rate-star:disabled { cursor: default; }
+.astor-rate-star-on:disabled { color: #f5a623; }
+
+/* Обраний бал словами — поряд із зірками, бо колір бачать не всі. */
+.astor-rate-score {
+  margin-left: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  opacity: .75;
+}
+
 .astor-rate-star:focus-visible { outline: 2px solid var(--color-accent, #c8102e); outline-offset: 2px; }
 
 .astor-rate-comment { margin-top: 10px; }
@@ -242,7 +254,19 @@
 
 .astor-rate-skip:disabled { opacity: .5; cursor: default; }
 
-.astor-rate-review {
+/*
+ * Колір і підкреслення перелічені для КОЖНОГО стану посилання навмисно.
+ * Сторінка має глобальне `a:hover { color: var(--accent) }` зі
+ * специфічністю 0,1,1 — вище за просте `.astor-rate-review` (0,1,0).
+ * Без цих рядків текст кнопки на наведення ставав акцентним кольором,
+ * тобто червоним на червоному, і кнопка з вигляду порожніла.
+ */
+.astor-rate-review,
+.astor-rate-review:link,
+.astor-rate-review:visited,
+.astor-rate-review:hover,
+.astor-rate-review:focus,
+.astor-rate-review:active {
   display: inline-block;
   margin-top: 4px;
   padding: 9px 16px;
@@ -253,5 +277,39 @@
   font-weight: 600;
 }
 
-.astor-rate-review:hover { filter: brightness(1.08); }
-.astor-rate-review:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+/* Затемнення, а не освітлення: фон заданий змінною, і підібрати до неї
+   другий колір наосліп не можна, а brightness працює з будь-яким. */
+.astor-rate-review:hover,
+.astor-rate-review:focus { filter: brightness(0.9); }
+.astor-rate-review:focus-visible { outline: 3px solid var(--color-accent, #c8102e); outline-offset: 2px; }
+
+/* ── «Завершити чат і оцінити» ────────────────────────────────────────── */
+
+/*
+ * Системний рядок під полем вводу. З'являється лише коли клієнт уже
+ * назвався: оцінку ми приймаємо тільки від тих, кого знаємо на ім'я і
+ * за номером, тож і пропонувати її раніше не можна.
+ */
+.astor-chat-finish {
+  display: flex;
+  justify-content: center;
+  padding: 0 14px 10px;
+  background: #fff;
+}
+
+.astor-chat-finish[hidden] { display: none; }
+
+.astor-chat-finish button {
+  border: 1px solid rgba(0, 0, 0, .15);
+  background: none;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font: 500 13px/1.2 inherit;
+  color: inherit;
+  opacity: .75;
+  cursor: pointer;
+}
+
+.astor-chat-finish button:hover { opacity: 1; }
+.astor-chat-finish button:disabled { opacity: .4; cursor: default; }
+.astor-chat-finish button:focus-visible { outline: 2px solid var(--color-accent, #c8102e); outline-offset: 2px; }

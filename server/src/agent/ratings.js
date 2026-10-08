@@ -80,6 +80,13 @@ export async function recordScore({ conversationId, score, channel, externalId }
     return { ok: false, created: false, error: 'foreign_conversation' };
   }
 
+  // Оцінка лише від клієнта, якого ми знаємо на ім'я і за номером.
+  // Перевірка саме тут, а не тільки в каналі: інакше правило трималося б
+  // на тому, що віджет не намалював зірочки, а це не правило.
+  if (!closure.ratable) {
+    return { ok: false, created: false, error: 'not_identified' };
+  }
+
   const { rating, created } = await saveRating({
     conversationId,
     customerId: closure.customerId,

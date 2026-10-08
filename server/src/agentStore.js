@@ -363,25 +363,46 @@ export async function setConversationStatus(channel, externalId, status) {
  */
 export async function closeConversation(conversation) {
   conversation.status = 'closed';
+
+  const customer = conversation.customerId ? await get(CUSTOMER(conversation.customerId)) : null;
+
+  const closure = {
+    conversationId: conversation.id,
+    channel: conversation.channel,
+    externalId: String(conversation.externalId),
+    customerId: conversation.customerId ?? null,
+    // Оцінку приймаємо лише від клієнта, якого ми знаємо на ім'я і за
+    // номером. Анонімна зірочка нічого не каже: ні кому передзвонити на
+    // одиницю, ні кого не просити про відгук наступні 90 днів.
+    // Рішення приймається тут, на момент закриття, і їде в запис —
+    // щоб кнопка, натиснута через годину, не залежала від того, що
+    // сталося з карткою клієнта за цю годину.
+    ratable: Boolean(customer?.name && customer?.phone),
+    closedAt: new Date().toISOString(),
+  };
+
   await Promise.all([
     saveConversation(conversation),
-    set(
-      CLOSURE(conversation.id),
-      {
-        conversationId: conversation.id,
-        channel: conversation.channel,
-        externalId: String(conversation.externalId),
-        customerId: conversation.customerId ?? null,
-        closedAt: new Date().toISOString(),
-      },
-      CONVERSATION_TTL_SEC
-    ),
+    set(CLOSURE(conversation.id), closure, CONVERSATION_TTL_SEC),
   ]);
-  return conversation;
+
+  return { conversation, closure };
 }
 
 /** @returns {Promise<object|null>} запис про закриття діалогу за його id */
 export const loadClosure = (conversationId) => get(CLOSURE(conversationId));
+
+/**
+ * Чи знаємо ми цього клієнта настільки, щоб приймати від нього оцінку.
+ * Те саме питання, що й `ratable` у записі про закриття, але для діалогу,
+ * який ще триває: віджет питає його, щоб вирішити, чи показувати кнопку
+ * «Завершити чат і оцінити».
+ */
+export async function isIdentified(customerId) {
+  if (!customerId) return false;
+  const customer = await get(CUSTOMER(customerId));
+  return Boolean(customer?.name && customer?.phone);
+}
 
 /* ── оцінки ──────────────────────────────────────────────────────────── */
 

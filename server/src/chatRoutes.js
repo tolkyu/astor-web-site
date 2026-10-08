@@ -24,7 +24,13 @@ import { Router } from 'express';
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { config, agentConfigured } from './config.js';
 import { rateLimit } from './rateLimit.js';
-import { loadConversation, loadConversationForMessage } from './agentStore.js';
+import {
+  bumpStat,
+  closeConversation,
+  isIdentified,
+  loadConversation,
+  loadConversationForMessage,
+} from './agentStore.js';
 import { runAgent } from './agent/run.js';
 import { REVIEW_INVITE, recordComment, recordScore, reviewUrl, skipComment } from './agent/ratings.js';
 import { site } from './site.js';
@@ -167,6 +173,8 @@ chatRouter.post('/session', rateLimit('chat-session', 3600_000, 60), async (req,
         history,
         status: conversation.status,
         handed_off: conversation.status === 'handoff',
+        can_finish:
+          conversation.status === 'active' && (await isIdentified(conversation.customerId)),
       });
     }
   }
@@ -246,8 +254,12 @@ chatRouter.post('/', perIp, perSession, async (req, res) => {
       // Віджет ховає поле вводу після handoff: обіцяти відповідь, якої
       // не буде, гірше, ніж чесно відправити людину до телефону.
       handed_off: result.handedOff,
-      // Діалог закрито — віджет малює зірочки.
+      // Діалог закрито — віджет малює зірочки, але лише якщо є кого
+      // питати: від анонімного гостя оцінку не беремо.
       closed: result.closed,
+      can_rate: result.ratable,
+      // Чи показувати «Завершити чат і оцінити» під полем вводу.
+      can_finish: result.identified && !result.closed,
       conversation_id: result.closed ? result.conversationId : undefined,
     });
   } catch (err) {
@@ -313,5 +325,46 @@ chatRouter.post('/rate', perIp, requireSession, rateLimit('chat-rate', 600_000, 
     // віджет сам вирішував би, коли просити відгук, і правило 90 днів
     // жило б у браузері клієнта.
     ...(result.reviewLink ? { review_invite: REVIEW_INVITE, review_url: reviewUrl() } : {}),
+  });
+});
+
+/**
+ * `POST /api/chat/finish` — кнопка «Завершити чат і оцінити».
+ *
+ * Те саме, що `/finish` у Telegram і що робить сам агент через
+ * close_conversation, але руками клієнта. Моделі тут не питаємо: клієнт
+ * уже сказав, чого хоче, і платити за запит, щоб отримати «до побачення»,
+ * сенсу немає.
+ *
+ * Закрити можна лише діалог, у якому клієнт назвався. Інакше зірочки
+ * нема кому показувати, а діалог закрився б без жодного наслідку — тільки
+ * з втратою контексту.
+ */
+chatRouter.post('/finish', perIp, requireSession, rateLimit('chat-finish', 600_000, 10), async (req, res) => {
+  if (!agentConfigured) return res.status(503).json({ ok: false, error: 'agent_disabled' });
+
+  const conversation = await loadConversation('web', req.sessionId);
+
+  if (!conversation.messages.length) {
+    return res.status(400).json({ ok: false, error: 'empty_conversation' });
+  }
+
+  if (conversation.status === 'closed') {
+    return res.json({ ok: true, closed: true, conversation_id: conversation.id, can_rate: false });
+  }
+
+  if (!(await isIdentified(conversation.customerId))) {
+    return res.status(400).json({ ok: false, error: 'not_identified' });
+  }
+
+  const { closure } = await closeConversation(conversation);
+  await bumpStat('closed');
+
+  res.json({
+    ok: true,
+    closed: true,
+    can_rate: closure.ratable,
+    conversation_id: conversation.id,
+    reply: 'Дякую за звернення! Гарної дороги.',
   });
 });

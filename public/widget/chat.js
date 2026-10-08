@@ -124,8 +124,18 @@
     el.form.appendChild(el.input);
     el.form.appendChild(el.send);
 
+    // Системний рядок «завершити чат і оцінити». Схований, поки клієнт не
+    // назвав ім'я й телефон: оцінку ми приймаємо тільки від тих, кого
+    // знаємо, тож і пропонувати її раніше нема сенсу.
+    el.finish = node('div', 'astor-chat-finish');
+    el.finish.hidden = true;
+    el.finishButton = node('button', null, 'Завершити чат і оцінити');
+    el.finishButton.type = 'button';
+    el.finish.appendChild(el.finishButton);
+
     el.panel.appendChild(head);
     el.panel.appendChild(el.log);
+    el.panel.appendChild(el.finish);
     el.panel.appendChild(el.form);
 
     document.body.appendChild(el.toggle);
@@ -174,7 +184,35 @@
   function closeInput(message) {
     state.closed = true;
     el.form.hidden = true;
+    el.finish.hidden = true;
     addPhoneNote(message);
+  }
+
+  /** Кнопку завершення показуємо лише коли сервер каже, що клієнт відомий. */
+  function setCanFinish(allowed) {
+    el.finish.hidden = !allowed || state.closed;
+  }
+
+  /** «Завершити чат і оцінити» — те саме, що /finish у Telegram. */
+  function finishChat() {
+    el.finishButton.disabled = true;
+
+    post('/finish', { token: state.token })
+      .then(function (res) {
+        el.finish.hidden = true;
+
+        if (!res.data.ok || !res.data.conversation_id) {
+          el.finishButton.disabled = false;
+          el.finish.hidden = false;
+          return;
+        }
+
+        if (res.data.reply) addMessage(res.data.reply, 'bot');
+        addRating(res.data.conversation_id);
+      })
+      .catch(function () {
+        el.finishButton.disabled = false;
+      });
   }
 
   /* ── оцінка діалогу ───────────────────────────────────────────────── */
@@ -190,13 +228,23 @@
 
     var row = node('div', 'astor-rate-stars');
     var buttons = [];
+    // Скільки клієнт обрав. Поки нуль — підсвітка живе тільки під курсором;
+    // після вибору вона мусить лишитись назавжди, і саме цього значення
+    // тримається mouseleave.
+    var chosen = 0;
 
-    function pick(score) {
+    var score = node('span', 'astor-rate-score');
+
+    function pick(value) {
+      chosen = value;
+      highlight(buttons, chosen);
+      score.textContent = value + ' з 5';
+
       // Кнопки знімаємо одразу: повторне натискання все одно нічого не
       // змінить (сервер лишає першу оцінку), але клієнт цього не знає.
       for (var i = 0; i < buttons.length; i++) buttons[i].disabled = true;
 
-      post('/rate', { token: state.token, conversation_id: conversationId, score: score })
+      post('/rate', { token: state.token, conversation_id: conversationId, score: value })
         .then(function (res) {
           if (!res.data.ok) {
             wrap.appendChild(node('div', 'astor-rate-label', 'Не вдалося зберегти оцінку.'));
@@ -212,22 +260,27 @@
         });
     }
 
-    for (var score = 1; score <= 5; score++) {
+    for (var i = 1; i <= 5; i++) {
       (function (value) {
         var star = node('button', 'astor-rate-star', '★');
         star.type = 'button';
         star.setAttribute('aria-label', value + ' з 5');
         // Підсвічуємо все до наведеної зірочки — як у будь-якій оцінці.
-        star.addEventListener('mouseenter', function () { highlight(buttons, value); });
-        star.addEventListener('focus', function () { highlight(buttons, value); });
-        star.addEventListener('click', function () { highlight(buttons, value); pick(value); });
+        // Але тільки поки вибору ще немає: після нього курсор не має права
+        // показувати бал, якого клієнт не ставив.
+        star.addEventListener('mouseenter', function () { if (!chosen) highlight(buttons, value); });
+        star.addEventListener('focus', function () { if (!chosen) highlight(buttons, value); });
+        star.addEventListener('click', function () { if (!chosen) pick(value); });
         buttons.push(star);
         row.appendChild(star);
-      })(score);
+      })(i);
     }
 
-    row.addEventListener('mouseleave', function () { highlight(buttons, 0); });
+    // Повертаємось до обраного, а не до нуля. Саме через нуль підсвітка
+    // раніше зникала, щойно курсор ішов із зірочок.
+    row.addEventListener('mouseleave', function () { highlight(buttons, chosen); });
 
+    row.appendChild(score);
     wrap.appendChild(row);
     el.log.appendChild(wrap);
     el.log.scrollTop = el.log.scrollHeight;
@@ -341,6 +394,9 @@
         // Діалог уже в руках адміністратора — поле вводу не показуємо.
         if (res.data.handed_off) {
           closeInput('Далі з вами зв\'яжеться адміністратор. Телефон:');
+        } else {
+          // Клієнт, що назвався до перезавантаження, лишається названим.
+          setCanFinish(res.data.can_finish);
         }
         return;
       }
@@ -383,10 +439,22 @@
         }
 
         if (res.data.reply) addMessage(res.data.reply, 'bot');
-        if (res.data.handed_off) closeInput('Далі з вами зв\'яжеться адміністратор. Телефон:');
-        // Агент закрив діалог — просимо оцінку. Поле вводу лишається:
-        // клієнт може почати нову розмову, не чекаючи нічиєї згоди.
-        else if (res.data.closed && res.data.conversation_id) addRating(res.data.conversation_id);
+
+        if (res.data.handed_off) {
+          closeInput('Далі з вами зв\'яжеться адміністратор. Телефон:');
+          return;
+        }
+
+        // Агент закрив діалог — просимо оцінку, але тільки якщо сервер
+        // дозволив: від анонімного гостя зірочки не беремо. Поле вводу
+        // лишається, клієнт може почати нову розмову будь-коли.
+        if (res.data.closed) {
+          setCanFinish(false);
+          if (res.data.can_rate && res.data.conversation_id) addRating(res.data.conversation_id);
+          return;
+        }
+
+        setCanFinish(res.data.can_finish);
       })
       .catch(function () {
         typing.remove();
@@ -434,6 +502,7 @@
     el.toggle.addEventListener('click', open);
     el.close.addEventListener('click', close);
     el.form.addEventListener('submit', submit);
+    el.finishButton.addEventListener('click', finishChat);
 
     // Enter надсилає, Shift+Enter переносить рядок — як у месенджерах.
     el.input.addEventListener('keydown', function (event) {
