@@ -94,3 +94,7 @@ function revealAnchor() {
   if (target?.matches('details')) target.open = true;
 }
 window.addEventListener('hashchange', revealAnchor); revealAnchor();
+const toTop = document.getElementById('to-top');
+const toggleToTop = () => { toTop.hidden = window.scrollY < 600; };
+window.addEventListener('scroll', toggleToTop, { passive: true });
+toggleToTop();

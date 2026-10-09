@@ -447,27 +447,6 @@ tbody tr:last-child td {
   color:var(--muted);
   margin-top:10px;
 }
-.workshop {
-  background:var(--soft);
-}
-.workshop-inner {
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  column-gap:100px;
-  align-items:start;
-}
-.workshop .eyebrow {
-  grid-column:1/-1;
-}
-.workshop p:not(.eyebrow) {
-  color:var(--muted);
-  max-width:45ch;
-}
-.workshop .text-link {
-  grid-column:2;
-  margin-top:24px;
-  justify-self:start;
-}
 .request-section {
   display:grid;
   grid-template-columns:.9fr 1.1fr;
@@ -633,6 +612,34 @@ input::placeholder,textarea::placeholder {
 .footer>a:last-child {
   margin-left:auto;
 }
+.to-top {
+  position:fixed;
+  left:20px;
+  bottom:20px;
+  z-index:9997;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:48px;
+  height:48px;
+  border-radius:999px;
+  border:1px solid var(--line);
+  background:var(--white);
+  color:var(--ink);
+  font-size:20px;
+  line-height:1;
+  text-decoration:none;
+  box-shadow:0 6px 24px rgb(32 45 52 / 18%);
+  transition:opacity .2s ease,transform .2s ease,color .2s ease;
+}
+.to-top:hover {
+  color:var(--accent);
+  transform:translateY(-2px);
+}
+.to-top:focus-visible {
+  outline:2px solid var(--accent);
+  outline-offset:3px;
+}
 @media(min-width:1600px) {
   .hero {
     padding-block:88px 100px;
@@ -651,9 +658,6 @@ input::placeholder,textarea::placeholder {
   .header-inner nav {
     gap:16px;
   }
-  .header-inner nav a[href="#workshop"] {
-    display:none;
-  }
   .header-call {
     padding-left:20px;
   }
@@ -663,7 +667,7 @@ input::placeholder,textarea::placeholder {
   .hero-photo img {
     height:380px;
   }
-  .process,.request-section,.workshop-inner {
+  .process,.request-section {
     gap:48px;
   }
   .contact-grid {
@@ -714,13 +718,9 @@ input::placeholder,textarea::placeholder {
   .section-heading>p {
     margin-top:24px;
   }
-  .process,.request-section,.contact-grid,.workshop-inner {
+  .process,.request-section,.contact-grid {
     grid-template-columns:1fr;
     gap:32px;
-  }
-  .workshop .text-link {
-    grid-column:1;
-    margin-top:0;
   }
   .popular-grid {
     grid-template-columns:1fr;
@@ -811,6 +811,13 @@ input::placeholder,textarea::placeholder {
 @media(max-width:480px) {
   .container {
     width:calc(100% - 40px);
+  }
+  .to-top {
+    left:14px;
+    bottom:14px;
+    width:42px;
+    height:42px;
+    font-size:18px;
   }
   .header-inner {
     min-height:80px;

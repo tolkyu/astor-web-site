@@ -20,8 +20,8 @@
 <body id="top">
 <a class="skip-link" href="#main">Перейти до вмісту</a>
 <header class="site-header"><div class="container header-inner">
-<a class="brand" href="#top" aria-label="Астор — на початок"><img src="/assets/logo-mark.png" width="42" height="42" alt=""><span>АСТОР<small>АВТОСЕРВІС</small></span></a>
-<nav aria-label="Основна навігація"><a href="#services">Послуги</a><a href="#prices">Ціни</a><a href="#workshop">Майстерня</a><a href="#contact">Контакти</a></nav>
+<p class="brand"><img src="/assets/logo-mark.png" width="42" height="42" alt=""><span>АСТОР<small>АВТОСЕРВІС</small></span></p>
+<nav aria-label="Основна навігація"><a href="#services">Послуги</a><a href="#prices">Ціни</a><a href="#contact">Контакти</a></nav>
 <a class="header-call" href="tel:{{phone}}" data-event="call"><span class="desktop-phone">{{phoneLabel}}</span><span class="mobile-phone">Зателефонувати</span><span aria-hidden="true">↗</span></a>
 </div></header>
 <main id="main">
@@ -48,9 +48,6 @@
 <div><p class="eyebrow">Перед візитом</p><h2 id="process-title">Розкажіть, що<br>турбує в авто.</h2><p class="muted">Не потрібно самостійно ставити діагноз. Опишіть, що змінилося: звук, поведінка автомобіля чи повідомлення на панелі.</p></div>
 <ol class="steps"><li><span>01</span><div><h3>Зв’яжіться з майстернею</h3><p>Зателефонуйте або залиште модель авто й опис проблеми у формі нижче.</p></div></li><li><span>02</span><div><h3>Уточніть роботи та час</h3><p>Під час розмови узгодьте візит і запитайте про діагностику, запчастини та вартість.</p></div></li><li><span>03</span><div><h3>Приїжджайте на Джамбула</h3><p>Відкрийте точку на мапі. Якщо не знаходите заїзд — зателефонуйте нам.</p></div></li></ol>
 </section>
-<section class="workshop section" id="workshop"><div class="container workshop-inner">
-<p class="eyebrow">Астор / Майстерня</p><h2>ТО, ходова, гальма,<br>двигун. За однією адресою.</h2><p>Обслуговуємо легкові автомобілі та кросовери. Перелік робіт і орієнтовні ціни відкриті — перегляньте їх перед зверненням.</p><a class="text-link" href="#contact">Як доїхати <span aria-hidden="true">↗</span></a>
-</div></section>
 <section class="section container request-section" id="request" aria-labelledby="request-title">
 <div><p class="eyebrow">Заявка на сервіс</p><h2 id="request-title">Домовимося<br>про візит.</h2><p class="muted">Залиште контакт і коротко опишіть роботи. Майстер зв’яжеться з вами в робочий час, щоб узгодити деталі. Надсилання заявки ще не підтверджує час запису.</p><a class="request-phone" href="tel:{{phone}}" data-event="call">{{phoneLabel}}</a><p class="muted">{{hours}}</p></div>
 <div class="request-panel">
@@ -72,5 +69,6 @@
 <div class="container"><details class="privacy" id="privacy"><summary>Як обробляємо дані заявки</summary><p>Ім’я, телефон і опис робіт використовуються для зв’язку щодо вашого звернення. Заявка зберігається у сховищі сервісу та передається майстерні через Telegram. Не додавайте до опису документи, платіжні реквізити або інші зайві персональні дані.</p><p>Щоб уточнити використання або попросити видалити дані, зверніться за номером <a href="tel:{{phone}}">{{phoneLabel}}</a>. Технічні лічильники обмежують повторні запити; статистика взаємодії не містить імені, телефону чи тексту заявки.</p></details></div>
 </main>
 <footer class="container footer"><a class="brand footer-brand" href="#top">АСТОР</a><p>Автосервіс у Кривому Розі</p><a href="#top">На початок ↑</a></footer>
+<a class="to-top" href="#top" id="to-top" hidden><span aria-hidden="true">↑</span><span class="sr-only">Нагору сторінки</span></a>
 <script src="/widget/chat.js" defer></script>
 </body></html>
